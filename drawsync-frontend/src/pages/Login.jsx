@@ -23,91 +23,78 @@ export default function Login() {
     if (result.error) {
       setError(result.error.message)
     } else {
-      navigate('/app') // ohjaa pääsivulle
+      navigate('/app')
     }
   }
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      height: '100vh',
-      backgroundColor: '#f3f4f6'
-    }}>
-      <form onSubmit={handleSubmit} style={{
-        background: 'white',
-        padding: '32px',
-        borderRadius: '8px',
-        boxShadow: '0 0 12px rgba(0,0,0,0.1)',
-        width: '100%',
-        maxWidth: '400px'
-      }}>
-        <h2 style={{ textAlign: 'center', marginBottom: '24px' }}>
-          {isLogin ? 'Kirjaudu sisään' : 'Luo tunnus'}
-        </h2>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-gradient-to-br from-[#999] via-[#777] to-[#555] text-white w-full max-w-md min-w-[320px] rounded-xl shadow-lg p-10 space-y-6"
+      >
+        {/* Logo ja otsikko */}
+<div className="flex flex-col items-center mb-4">
+  <div className="relative inline-block">
+    <div className="absolute inset-0 bg-gradient-to-r from-white/60 to-transparent rounded-md blur-sm"></div>
+    <img
+      src="/src/assets/mantox-logo.png"
+      alt="Mantox Logo"
+      className="relative h-14"
+    />
+  </div>
+  <div className="w-full h-[2px] bg-[#ff5757] rounded mt-3"></div>
+</div>
 
-        <label style={{ fontWeight: '500' }}>Sähköposti</label>
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '10px',
-            marginBottom: '16px',
-            border: '1px solid #ccc',
-            borderRadius: '4px'
-          }}
-        />
+        {/* Sähköposti */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-white/90">Sähköposti</label>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full border border-white/30 bg-white/10 text-white placeholder-white/60 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-white"
+            placeholder="nimi@example.com"
+          />
+        </div>
 
-        <label style={{ fontWeight: '500' }}>Salasana</label>
-        <input
-          type="password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '10px',
-            marginBottom: '16px',
-            border: '1px solid #ccc',
-            borderRadius: '4px'
-          }}
-        />
+        {/* Salasana */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-white/90">Salasana</label>
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full border border-white/30 bg-white/10 text-white placeholder-white/60 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-white"
+            placeholder="********"
+          />
+        </div>
 
+        {/* Virheilmoitus */}
         {error && (
-          <div style={{
-            backgroundColor: '#fee2e2',
-            color: '#991b1b',
-            padding: '8px',
-            borderRadius: '4px',
-            marginBottom: '16px',
-            fontSize: '14px'
-          }}>
+          <div className="bg-[#ffe5e5] text-[#ff5757] text-sm px-3 py-2 rounded">
             {error}
           </div>
         )}
 
-        <button type="submit" style={{
-          width: '100%',
-          padding: '12px',
-          backgroundColor: '#3b82f6',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          fontWeight: '600',
-          cursor: 'pointer'
-        }}>
+        {/* Kirjaudu-painike */}
+        <button
+          type="submit"
+          className="w-full py-2 px-4 bg-white text-[#737373] font-semibold rounded-md hover:bg-[#ff5757]/90 transition"
+        >
           {isLogin ? 'Kirjaudu' : 'Rekisteröidy'}
         </button>
 
+        {/* Vaihtolinkki */}
         <p
-          style={{ marginTop: '16px', textAlign: 'center', cursor: 'pointer', color: '#3b82f6' }}
+          className="text-sm text-center text-white/80 hover:text-[#ff5757] underline cursor-pointer transition"
           onClick={() => setIsLogin(!isLogin)}
         >
-          {isLogin ? 'Eikö sinulla ole tunnusta? Rekisteröidy' : 'Onko sinulla tunnus? Kirjaudu sisään'}
+          {isLogin
+            ? 'Eikö sinulla ole tunnusta? Rekisteröidy'
+            : 'Onko sinulla tunnus? Kirjaudu sisään'}
         </p>
       </form>
     </div>
