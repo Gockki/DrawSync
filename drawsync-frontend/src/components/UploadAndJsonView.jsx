@@ -2,6 +2,86 @@ import { useState, useEffect } from "react";
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
+// Pinnoitevaihtoehdot asiakkaan palveluiden mukaan
+const COATING_OPTIONS = {
+  "sahkosinkitys": {
+    name: "Sähkösinkitys",
+    description: "5-25 μm sinkkikerros teräskappaleelle",
+    maxSize: "500 kg | 2750 x 1100 x 600 mm",
+    basePrice: 15, // €/m²
+    variants: [
+      { id: "kelta", name: "Keltapassivointi", priceMultiplier: 1.2, thickness: "5-25 μm" },
+      { id: "sini", name: "Sinipassivointi", priceMultiplier: 1.0, thickness: "5-25 μm" },
+      { id: "musta", name: "Mustapassivointi", priceMultiplier: 1.1, thickness: "5-25 μm" }
+    ]
+  },
+  "anodisointi": {
+    name: "Anodisointi/Eloksointi",
+    description: "5-30 μm hapetettu alumiinikerros",
+    maxSize: "100 kg | 1100 x 1000 x 300 mm",
+    basePrice: 20, // €/m²
+    variants: [
+      { id: "luonnon", name: "Luonnonväri (hopeanharmaa)", priceMultiplier: 1.0, thickness: "5-30 μm" },
+      { id: "musta", name: "Musta-anodisointi", priceMultiplier: 1.25, thickness: "5-30 μm" },
+      { id: "sininen", name: "Siniväri", priceMultiplier: 1.25, thickness: "5-30 μm" }
+    ]
+  },
+  "kemiallinen_nikkeli": {
+    name: "Kemiallinen nikkeli",
+    description: "Räätälöitävät funktionaaliset ominaisuudet",
+    maxSize: "100 kg | 500 x 500 x 150 mm",
+    basePrice: 30, // €/m²
+    variants: [
+      { id: "musta", name: "Mustanikkeli (kova, kulutuskestävä)", priceMultiplier: 1.5, thickness: "5-25 μm" },
+      { id: "korkea_p", name: "Korkeafosforinen nikkeli", priceMultiplier: 1.2, thickness: "5-25 μm" },
+      { id: "matala_p", name: "Matalafosforinen nikkeli", priceMultiplier: 1.0, thickness: "5-25 μm" }
+    ]
+  },
+  "kuparointi": {
+    name: "Kuparointi",
+    description: "Sähkönjohtava pinnoite ja aluspinnoite",
+    maxSize: "Kysy erikseen",
+    basePrice: 12, // €/m²
+    variants: [
+      { id: "alkalinen", name: "Alkalinen kupari (aluspinnoite)", priceMultiplier: 0.8, thickness: "5-15 μm" },
+      { id: "hapan", name: "Hapankupari (tasoittava)", priceMultiplier: 1.2, thickness: "10-25 μm" }
+    ]
+  }
+};
+
+// Hinnoittelufunktiot
+const getBatchDiscount = (batchSize) => {
+  const discounts = {
+    "1-10": 0,
+    "11-50": 0.05,
+    "51-200": 0.10,
+    "201-1000": 0.15,
+    "1000+": 0.20
+  };
+  return discounts[batchSize] || 0;
+};
+
+const getUrgencyMultiplier = (urgency) => {
+  const multipliers = {
+    "normaali": 1.0,
+    "kiireellinen": 1.2,
+    "express": 1.5
+  };
+  return multipliers[urgency] || 1.0;
+};
+
+const calculatePretreatmentCost = (pretreatments, surfaceM2) => {
+  const costs = {
+    "rasvanpoisto": 3, // €/m²
+    "peittaus": 5, // €/m²
+    "hiekkapuhallus": 8 // €/m²
+  };
+  
+  return pretreatments.reduce((total, treatment) => {
+    return total + (costs[treatment] || 0) * surfaceM2;
+  }, 0);
+};
+
 // Muokattava kenttä -komponentti
 const EditableField = ({ label, value, unit, onSave, editable = true }) => {
   const [editing, setEditing] = useState(false);
@@ -33,6 +113,7 @@ const EditableField = ({ label, value, unit, onSave, editable = true }) => {
               borderRadius: '4px',
               fontSize: '14px'
             }}
+            autoFocus
           />
           <button onClick={handleSave} style={{ cursor: 'pointer' }}>✓</button>
           <button onClick={() => setEditing(false)} style={{ cursor: 'pointer' }}>✗</button>
@@ -82,27 +163,92 @@ const StatusBadge = ({ type, text }) => {
 };
 
 export default function UploadAndJsonView() {
-
-
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) navigate('/');
-    };
-    checkSession();
-  }, []);
-
-  // ... kaikki muu koodi jatkuu tästä
-
+  const navigate = useNavigate();
+  
+  // Tiedosto ja analyysi
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [editedData, setEditedData] = useState({});
+  
+  // UI state
   const [activeTab, setActiveTab] = useState('perustiedot');
   const [manualSurfaceArea, setManualSurfaceArea] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
+  
+  // Palveluvalinnat
+  const [selectedCoating, setSelectedCoating] = useState('');
+  const [selectedVariant, setSelectedVariant] = useState('');
+  const [batchSize, setBatchSize] = useState('');
+  const [urgency, setUrgency] = useState('normaali');
+  const [pretreatments, setPretreatments] = useState([]);
+  
+  // Hinnoittelu
+  const [pricing, setPricing] = useState(null);
+
+  // Autentikointi
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) navigate('/');
+    };
+    checkSession();
+  }, [navigate]);
+
+  // Reaktiivinen hinnoittelu
+  useEffect(() => {
+    if (data?.pinta_ala_analyysi?.pinta_ala_cm2 && selectedCoating && selectedVariant) {
+      const surfaceAreaCm2 = data.pinta_ala_analyysi.pinta_ala_cm2;
+      const surfaceAreaM2 = surfaceAreaCm2 / 10000;
+      const weight = editedData.paino_kg || data.perustiedot?.paino_kg || 0;
+      
+      const coating = COATING_OPTIONS[selectedCoating];
+      const variant = coating.variants.find(v => v.id === selectedVariant);
+      
+      if (coating && variant) {
+        const setupCost = 50; // Kiinteä asetuskustannus
+        const pretreatmentCost = calculatePretreatmentCost(pretreatments, surfaceAreaM2);
+        const coatingPricePerM2 = coating.basePrice * variant.priceMultiplier;
+        const coatingCost = surfaceAreaM2 * coatingPricePerM2;
+        
+        const subtotal = setupCost + pretreatmentCost + coatingCost;
+        const batchDiscount = subtotal * getBatchDiscount(batchSize);
+        const urgencyMultiplier = getUrgencyMultiplier(urgency);
+        const afterDiscountAndUrgency = (subtotal - batchDiscount) * urgencyMultiplier;
+        const vat = afterDiscountAndUrgency * 0.24;
+        const total = afterDiscountAndUrgency + vat;
+        
+        setPricing({
+          surfaceAreaCm2,
+          surfaceAreaM2: parseFloat(surfaceAreaM2.toFixed(4)),
+          weight,
+          coating: coating.name,
+          variant: variant.name,
+          coatingPricePerM2: parseFloat(coatingPricePerM2.toFixed(2)),
+          setupCost,
+          pretreatmentCost: parseFloat(pretreatmentCost.toFixed(2)),
+          coatingCost: parseFloat(coatingCost.toFixed(2)),
+          subtotal: parseFloat(subtotal.toFixed(2)),
+          batchDiscount: parseFloat(batchDiscount.toFixed(2)),
+          batchDiscountPercent: getBatchDiscount(batchSize) * 100,
+          urgencyMultiplier,
+          afterDiscountAndUrgency: parseFloat(afterDiscountAndUrgency.toFixed(2)),
+          vat: parseFloat(vat.toFixed(2)),
+          total: parseFloat(total.toFixed(2)),
+          pretreatments: [...pretreatments]
+        });
+      }
+    } else {
+      setPricing(null);
+    }
+  }, [data, editedData, selectedCoating, selectedVariant, batchSize, urgency, pretreatments]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/');
+  };
 
   const handleDrop = (e) => {
     e.preventDefault();
@@ -112,18 +258,14 @@ export default function UploadAndJsonView() {
       setPreviewUrl(URL.createObjectURL(droppedFile));
     }
   };
-  const navigate = useNavigate()
 
-const handleLogout = async () => {
-  await supabase.auth.signOut()
-  navigate('/')
-}
   const handleUpload = async () => {
     if (!file) return;
     const formData = new FormData();
     formData.append("file", file);
     setLoading(true);
     setSuccess(false);
+    
     try {
       const res = await fetch("http://localhost:8000/process", {
         method: "POST",
@@ -163,35 +305,112 @@ const handleLogout = async () => {
       setManualSurfaceArea('');
     }
   };
-  // TÄHÄN PITÄÄ LISÄTÄ generateQuote funktio!
-  const generateQuote = () => {
-    console.log("Tarjous data:", { ...data, edited: editedData });
-    alert("Tarjous luotu! (Tässä voisi avata PDF tai lähettää sähköposti)");
+
+  const handlePretreatmentChange = (treatment, checked) => {
+    if (checked) {
+      setPretreatments(prev => [...prev, treatment]);
+    } else {
+      setPretreatments(prev => prev.filter(t => t !== treatment));
+    }
   };
+
+  const generateQuote = () => {
+    if (!pricing) {
+      alert("Valitse ensin palvelu hinnoittelua varten!");
+      return;
+    }
+
+    const quoteNumber = `FIN-${Date.now().toString().slice(-6)}`;
+    const quoteDate = new Date().toLocaleDateString('fi-FI');
+    
+    const quoteText = `
+╔════════════════════════════════════════╗
+║             TARJOUS                                             ║
+║          Tarjous: ${quoteNumber}                               ║
+║          Päivämäärä: ${quoteDate}                             ║
+╚════════════════════════════════════════╝
+
+TUOTETIEDOT:
+• Tuotekoodi: ${editedData.tuotekoodi || data?.perustiedot?.tuotekoodi || 'Ei määritelty'}
+• Materiaali: ${editedData.materiaali || data?.perustiedot?.materiaali || 'Ei määritelty'}
+• Paino: ${pricing.weight} kg
+• Pinta-ala: ${pricing.surfaceAreaCm2} cm² (${pricing.surfaceAreaM2} m²)
+
+VALITTU PALVELU:
+• ${pricing.coating} - ${pricing.variant}
+• Sarjakoko: ${batchSize || 'Ei määritelty'}
+• Kiireellisyys: ${urgency}
+${pretreatments.length > 0 ? `• Esikäsittelyt: ${pretreatments.join(', ')}` : ''}
+
+HINNOITTELU:
+• Asetuskustannus:        ${pricing.setupCost.toFixed(2)} €
+${pricing.pretreatmentCost > 0 ? `• Esikäsittelyt:         ${pricing.pretreatmentCost.toFixed(2)} €` : ''}
+• ${pricing.coating}:     ${pricing.coatingCost.toFixed(2)} € (${pricing.coatingPricePerM2} €/m²)
+                        ─────────
+• Yhteensä:              ${pricing.subtotal.toFixed(2)} €
+${pricing.batchDiscount > 0 ? `• Sarjakoko-alennus:     -${pricing.batchDiscount.toFixed(2)} € (-${pricing.batchDiscountPercent}%)` : ''}
+${pricing.urgencyMultiplier !== 1 ? `• Kiireellisyys-lisä:    +${((pricing.urgencyMultiplier - 1) * 100).toFixed(0)}%` : ''}
+• Yhteensä (alv 0%):     ${pricing.afterDiscountAndUrgency.toFixed(2)} €
+• ALV 24%:               ${pricing.vat.toFixed(2)} €
+                        ═════════
+• KOKONAISHINTA:         ${pricing.total.toFixed(2)} €
+
+TOIMITUSAIKA: 7-14 päivää (${urgency})
+VOIMASSAOLO: 30 päivää
+MAKSUEHTO: 14 päivää netto
+    `;
+
+    alert(quoteText);
+    
+    // Tallenna tarjous
+    const quoteData = {
+      quote: { number: quoteNumber, date: quoteDate },
+      data,
+      editedData,
+      pricing,
+      selections: { selectedCoating, selectedVariant, batchSize, urgency, pretreatments }
+    };
+    
+    const savedQuotes = JSON.parse(localStorage.getItem('finecom_quotes') || '[]');
+    savedQuotes.push(quoteData);
+    localStorage.setItem('finecom_quotes', JSON.stringify(savedQuotes));
+    
+    console.log("Tarjous tallennettu:", quoteData);
+  };
+
+  // Määritä mitkä välilehdet ovat käytettävissä
+  const hasAnalysisData = data && data.success;
+  const hasSurfaceArea = data?.pinta_ala_analyysi?.pinta_ala_cm2;
+  const hasServiceSelected = selectedCoating && selectedVariant;
+  const canShowPricing = hasSurfaceArea && hasServiceSelected;
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', padding: '20px' }}>
       <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+        
+        {/* Logout button */}
         <div style={{
-  position: 'fixed',
-  top: '20px',
-  right: '20px',
-  zIndex: 100,
-}}>
-  <button 
-    onClick={handleLogout}
-    style={{
-      backgroundColor: '#ef4444',
-      color: 'white',
-      border: 'none',
-      padding: '8px 16px',
-      borderRadius: '6px',
-      cursor: 'pointer',
-      fontWeight: '600'
-    }}
-  >
-    Kirjaudu ulos
-  </button>
-</div>
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 100,
+        }}>
+          <button 
+            onClick={handleLogout}
+            style={{
+              backgroundColor: '#ef4444',
+              color: 'white',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: '600'
+            }}
+          >
+            Kirjaudu ulos
+          </button>
+        </div>
+
         {/* Header */}
         <div style={{
           backgroundColor: 'white',
@@ -208,7 +427,7 @@ const handleLogout = async () => {
         {success && (
           <div style={{
             position: 'fixed',
-            top: '20px',
+            top: '80px',
             right: '20px',
             backgroundColor: '#10b981',
             color: 'white',
@@ -372,7 +591,7 @@ const handleLogout = async () => {
 
           {/* Right Column - Results */}
           <div>
-            {data ? (
+            {hasAnalysisData ? (
               <>
                 {/* Status Overview */}
                 <div style={{
@@ -395,8 +614,13 @@ const handleLogout = async () => {
                       <p style={{ fontWeight: '600' }}>{data.filename}</p>
                     </div>
                     <div style={{ flex: 1, minWidth: '150px' }}>
-                      <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Menetelmä</p>
-                      <p style={{ fontWeight: '600' }}>{data.processing_info?.method || 'tuntematon'}</p>
+                      <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Prosessi</p>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <StatusBadge type="success" text="Tunnista" />
+                        {hasSurfaceArea && <StatusBadge type="success" text="Mittaa" />}
+                        {hasServiceSelected && <StatusBadge type="success" text="Valittu" />}
+                        {canShowPricing && <StatusBadge type="success" text="Hinnoittelu" />}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -413,21 +637,29 @@ const handleLogout = async () => {
                     borderBottom: '1px solid #e5e7eb',
                     backgroundColor: '#f9fafb'
                   }}>
-                    {['perustiedot', 'mitat', 'pinta-ala', 'prosessi'].map(tab => (
+                    {[
+                      { id: 'perustiedot', name: 'Perustiedot', enabled: true },
+                      { id: 'mitat', name: 'Mitat', enabled: hasAnalysisData },
+                      { id: 'pinta-ala', name: 'Pinta-ala', enabled: hasAnalysisData },
+                      { id: 'palvelu', name: 'Palvelu', enabled: hasSurfaceArea },
+                      { id: 'hinnoittelu', name: 'Hinnoittelu', enabled: canShowPricing }
+                    ].map(tab => (
                       <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
+                        key={tab.id}
+                        onClick={() => tab.enabled && setActiveTab(tab.id)}
+                        disabled={!tab.enabled}
                         style={{
                           padding: '12px 24px',
                           border: 'none',
-                          backgroundColor: activeTab === tab ? 'white' : 'transparent',
-                          borderBottom: activeTab === tab ? '2px solid #3b82f6' : 'none',
-                          fontWeight: activeTab === tab ? '600' : '400',
-                          cursor: 'pointer',
-                          textTransform: 'capitalize'
+                          backgroundColor: activeTab === tab.id ? 'white' : 'transparent',
+                          borderBottom: activeTab === tab.id ? '2px solid #3b82f6' : 'none',
+                          fontWeight: activeTab === tab.id ? '600' : '400',
+                          cursor: tab.enabled ? 'pointer' : 'not-allowed',
+                          opacity: tab.enabled ? 1 : 0.5,
+                          color: tab.enabled ? 'inherit' : '#9ca3af'
                         }}
                       >
-                        {tab === 'pinta-ala' ? 'Pinta-ala' : tab}
+                        {tab.name}
                       </button>
                     ))}
                   </div>
@@ -538,7 +770,7 @@ const handleLogout = async () => {
                             marginBottom: '16px'
                           }}>
                             <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#065f46' }}>
-                              ✅ {data.pinta_ala_analyysi.pinta_ala_cm2} cm²
+                              ✅ {data.pinta_ala_analyysi.pinta_ala_cm2} cm² ({(data.pinta_ala_analyysi.pinta_ala_cm2 / 10000).toFixed(4)} m²)
                             </p>
                             <p style={{ color: '#065f46', marginTop: '8px' }}>
                               {data.pinta_ala_analyysi.laskelma}
@@ -575,14 +807,15 @@ const handleLogout = async () => {
                             <button 
                               onClick={() => setShowManualInput(true)}
                               style={{
-                              marginTop: '16px',
-                              padding: '8px 16px',
-                              backgroundColor: '#ef4444',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: 'pointer'
-                            }}>
+                                marginTop: '16px',
+                                padding: '8px 16px',
+                                backgroundColor: '#ef4444',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: 'pointer'
+                              }}
+                            >
                               Syötä manuaalisesti
                             </button>
                           </div>
@@ -685,102 +918,353 @@ const handleLogout = async () => {
                       </div>
                     )}
 
-                    {/* Prosessi Tab */}
-                    {activeTab === 'prosessi' && (
+                    {/* Palvelu Tab */}
+                    {activeTab === 'palvelu' && (
                       <div>
                         <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
-                          Prosessitiedot (Manuaalinen syöttö)
+                          Valitse palvelu
                         </h3>
                         
-                        <div style={{ display: 'grid', gap: '16px' }}>
+                        <div style={{ display: 'grid', gap: '20px' }}>
                           <div>
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                              Ripustustiheys
+                              Pinnoitetyyppi
                             </label>
-                            <select style={{
-                              width: '100%',
-                              padding: '8px',
-                              border: '1px solid #d1d5db',
-                              borderRadius: '6px'
-                            }}>
-                              <option>Valitse...</option>
-                              <option>Harva (50 kpl/tanko)</option>
-                              <option>Normaali (120 kpl/tanko)</option>
-                              <option>Tiivis (200 kpl/tanko)</option>
+                            <select 
+                              value={selectedCoating}
+                              onChange={(e) => {
+                                setSelectedCoating(e.target.value);
+                                setSelectedVariant(''); // Reset variant when coating changes
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                fontSize: '16px'
+                              }}
+                            >
+                              <option value="">Valitse pinnoite...</option>
+                              {Object.entries(COATING_OPTIONS).map(([key, coating]) => (
+                                <option key={key} value={key}>{coating.name}</option>
+                              ))}
+                            </select>
+                            
+                            {selectedCoating && (
+                              <div style={{ 
+                                marginTop: '12px', 
+                                padding: '16px', 
+                                backgroundColor: '#f9fafb', 
+                                borderRadius: '6px',
+                                fontSize: '14px'
+                              }}>
+                                <p><strong>Kuvaus:</strong> {COATING_OPTIONS[selectedCoating].description}</p>
+                                <p><strong>Maksimikoko:</strong> {COATING_OPTIONS[selectedCoating].maxSize}</p>
+                                <p><strong>Perushinta:</strong> {COATING_OPTIONS[selectedCoating].basePrice} €/m²</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {selectedCoating && (
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                                Pinnoitevariantti
+                              </label>
+                              <select 
+                                value={selectedVariant}
+                                onChange={(e) => setSelectedVariant(e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '12px',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '6px',
+                                  fontSize: '16px'
+                                }}
+                              >
+                                <option value="">Valitse variantti...</option>
+                                {COATING_OPTIONS[selectedCoating].variants.map((variant) => (
+                                  <option key={variant.id} value={variant.id}>
+                                    {variant.name} ({variant.thickness})
+                                  </option>
+                                ))}
+                              </select>
+                              
+                              {selectedVariant && (
+                                <div style={{ 
+                                  marginTop: '12px', 
+                                  padding: '16px', 
+                                  backgroundColor: '#dbeafe', 
+                                  borderRadius: '6px',
+                                  fontSize: '14px'
+                                }}>
+                                  {(() => {
+                                    const variant = COATING_OPTIONS[selectedCoating].variants.find(v => v.id === selectedVariant);
+                                    const finalPrice = (COATING_OPTIONS[selectedCoating].basePrice * variant.priceMultiplier).toFixed(2);
+                                    return (
+                                      <>
+                                        <p><strong>Valittu:</strong> {variant.name}</p>
+                                        <p><strong>Paksuus:</strong> {variant.thickness}</p>
+                                        <p><strong>Hinta:</strong> {finalPrice} €/m²</p>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                              Sarjakoko
+                            </label>
+                            <select 
+                              value={batchSize}
+                              onChange={(e) => setBatchSize(e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '12px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                fontSize: '16px'
+                              }}
+                            >
+                              <option value="">Valitse...</option>
+                              <option value="1-10">1-10 kpl (Prototyyppi)</option>
+                              <option value="11-50">11-50 kpl (Pieni sarja) -5%</option>
+                              <option value="51-200">51-200 kpl (Keskisarja) -10%</option>
+                              <option value="201-1000">201-1000 kpl (Suuri sarja) -15%</option>
+                              <option value="1000+">1000+ kpl (Massatuotanto) -20%</option>
                             </select>
                           </div>
                           
                           <div>
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                              Käsittelyohjelma
+                              Kiireellisyys
                             </label>
-                            <select style={{
-                              width: '100%',
-                              padding: '8px',
-                              border: '1px solid #d1d5db',
-                              borderRadius: '6px'
-                            }}>
-                              <option>Valitse...</option>
-                              <option>A1 - Alumiini perus</option>
-                              <option>A2 - Alumiini vahva</option>
-                              <option>S1 - Teräs perus</option>
-                              <option>S2 - Teräs vahva</option>
+                            <select 
+                              value={urgency}
+                              onChange={(e) => setUrgency(e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '12px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                fontSize: '16px'
+                              }}
+                            >
+                              <option value="normaali">Normaali (7-14 päivää)</option>
+                              <option value="kiireellinen">Kiireellinen (3-5 päivää) +20%</option>
+                              <option value="express">Express (1-2 päivää) +50%</option>
                             </select>
                           </div>
-                          
+
                           <div>
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                              Ripustintyyppi
+                              Esikäsittely
                             </label>
-                            <select style={{
-                              width: '100%',
-                              padding: '8px',
-                              border: '1px solid #d1d5db',
-                              borderRadius: '6px'
-                            }}>
-                              <option>Valitse...</option>
-                              <option>Aaltolankakoukku</option>
-                              <option>C-koukku</option>
-                              <option>Erikoisripustin</option>
-                            </select>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={pretreatments.includes('rasvanpoisto')}
+                                  onChange={(e) => handlePretreatmentChange('rasvanpoisto', e.target.checked)}
+                                />
+                                <span>Rasvanpoisto (+3 €/m²)</span>
+                              </label>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={pretreatments.includes('peittaus')}
+                                  onChange={(e) => handlePretreatmentChange('peittaus', e.target.checked)}
+                                />
+                                <span>Peittaus (hapan) (+5 €/m²)</span>
+                              </label>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={pretreatments.includes('hiekkapuhallus')}
+                                  onChange={(e) => handlePretreatmentChange('hiekkapuhallus', e.target.checked)}
+                                />
+                                <span>Hiekkapuhallus (+8 €/m²)</span>
+                              </label>
+                            </div>
                           </div>
+
+                          {/* Live Preview */}
+                          {pricing && (
+                            <div style={{
+                              marginTop: '20px',
+                              padding: '16px',
+                              backgroundColor: '#f0f9ff',
+                              border: '1px solid #0ea5e9',
+                              borderRadius: '8px'
+                            }}>
+                              <h4 style={{ margin: '0 0 12px 0', color: '#0369a1' }}>💰 Hinta-arvio</h4>
+                              <p style={{ margin: '4px 0', fontSize: '14px' }}>
+                                <strong>Pinta-ala:</strong> {pricing.surfaceAreaCm2} cm² ({pricing.surfaceAreaM2} m²)
+                              </p>
+                              <p style={{ margin: '4px 0', fontSize: '14px' }}>
+                                <strong>Arvioitu hinta:</strong> <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#059669' }}>{pricing.total} €</span>
+                              </p>
+                              <p style={{ margin: '4px 0', fontSize: '12px', color: '#6b7280' }}>
+                                Tarkempi erittely "Hinnoittelu"-välilehdellä
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
-                  </div>
-                </div>
 
-                {/* Action Buttons */}
-                <div style={{
-                  marginTop: '24px',
-                  display: 'flex',
-                  gap: '16px',
-                  justifyContent: 'flex-end'
-                }}>
-                  <button style={{
-                    padding: '12px 24px',
-                    backgroundColor: 'white',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontWeight: '600',
-                    cursor: 'pointer'
-                  }}>
-                    Tallenna luonnos
-                  </button>
-                  <button 
-                    onClick={generateQuote}
-                    style={{
-                      padding: '12px 24px',
-                      backgroundColor: '#3b82f6',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontWeight: '600',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Luo tarjous
-                  </button>
+                    {/* Hinnoittelu Tab */}
+                    {activeTab === 'hinnoittelu' && (
+                      <div>
+                        <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
+                          Hinnoittelu
+                        </h3>
+                        
+                        {pricing ? (
+                          <div>
+                            {/* Yhteenveto */}
+                            <div style={{
+                              backgroundColor: '#f9fafb',
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              padding: '20px',
+                              marginBottom: '24px'
+                            }}>
+                              <h4 style={{ margin: '0 0 16px 0', fontSize: '16px' }}>Tuotetiedot</h4>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', fontSize: '14px' }}>
+                                <div>
+                                  <span style={{ color: '#6b7280' }}>Pinta-ala: </span>
+                                  <span style={{ fontWeight: '600' }}>{pricing.surfaceAreaCm2} cm² ({pricing.surfaceAreaM2} m²)</span>
+                                </div>
+                                <div>
+                                  <span style={{ color: '#6b7280' }}>Paino: </span>
+                                  <span style={{ fontWeight: '600' }}>{pricing.weight} kg</span>
+                                </div>
+                                <div>
+                                  <span style={{ color: '#6b7280' }}>Palvelu: </span>
+                                  <span style={{ fontWeight: '600' }}>{pricing.coating} - {pricing.variant}</span>
+                                </div>
+                                <div>
+                                  <span style={{ color: '#6b7280' }}>Sarjakoko: </span>
+                                  <span style={{ fontWeight: '600' }}>{batchSize || 'Ei valittu'}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Hintalaskelma */}
+                            <div style={{
+                              backgroundColor: 'white',
+                              border: '2px solid #e5e7eb',
+                              borderRadius: '8px',
+                              padding: '24px'
+                            }}>
+                              <h4 style={{ margin: '0 0 20px 0', fontSize: '18px', textAlign: 'center' }}>HINTALASKELMA</h4>
+                              
+                              <div style={{ fontFamily: 'monospace', fontSize: '14px', lineHeight: '1.6' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                                  <span>Asetuskustannus:</span>
+                                  <span>{pricing.setupCost.toFixed(2)} €</span>
+                                </div>
+                                
+                                {pricing.pretreatmentCost > 0 && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                                    <span>Esikäsittelyt:</span>
+                                    <span>{pricing.pretreatmentCost.toFixed(2)} €</span>
+                                  </div>
+                                )}
+                                
+                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                                  <span>{pricing.coating}:</span>
+                                  <span>{pricing.coatingCost.toFixed(2)} € ({pricing.coatingPricePerM2} €/m²)</span>
+                                </div>
+                                
+                                <div style={{ borderTop: '1px solid #d1d5db', margin: '8px 0', padding: '4px 0' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600' }}>
+                                    <span>Välisumma:</span>
+                                    <span>{pricing.subtotal.toFixed(2)} €</span>
+                                  </div>
+                                </div>
+                                
+                                {pricing.batchDiscount > 0 && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#059669' }}>
+                                    <span>Sarjakoko-alennus (-{pricing.batchDiscountPercent}%):</span>
+                                    <span>-{pricing.batchDiscount.toFixed(2)} €</span>
+                                  </div>
+                                )}
+                                
+                                {pricing.urgencyMultiplier !== 1 && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#dc2626' }}>
+                                    <span>Kiireellisyys-lisä (+{((pricing.urgencyMultiplier - 1) * 100).toFixed(0)}%):</span>
+                                    <span>+{((pricing.afterDiscountAndUrgency / pricing.urgencyMultiplier - pricing.afterDiscountAndUrgency) * -1).toFixed(2)} €</span>
+                                  </div>
+                                )}
+                                
+                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontWeight: '600' }}>
+                                  <span>Yhteensä (alv 0%):</span>
+                                  <span>{pricing.afterDiscountAndUrgency.toFixed(2)} €</span>
+                                </div>
+                                
+                                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                                  <span>ALV 24%:</span>
+                                  <span>{pricing.vat.toFixed(2)} €</span>
+                                </div>
+                                
+                                <div style={{ 
+                                  borderTop: '2px solid #374151', 
+                                  margin: '12px 0 8px 0', 
+                                  padding: '8px 0',
+                                  display: 'flex', 
+                                  justifyContent: 'space-between',
+                                  fontSize: '18px',
+                                  fontWeight: 'bold',
+                                  backgroundColor: '#f9fafb'
+                                }}>
+                                  <span>KOKONAISHINTA:</span>
+                                  <span style={{ color: '#059669' }}>{pricing.total.toFixed(2)} €</span>
+                                </div>
+                              </div>
+                              
+                              <div style={{ marginTop: '20px', fontSize: '12px', color: '#6b7280', textAlign: 'center' }}>
+                                <p>Toimitusaika: 7-14 päivää ({urgency})</p>
+                                <p>Voimassaolo: 30 päivää | Maksuehto: 14 päivää netto</p>
+                              </div>
+                            </div>
+
+                            {/* Luo tarjous -nappi */}
+                            <div style={{ marginTop: '24px', textAlign: 'center' }}>
+                              <button
+                                onClick={generateQuote}
+                                style={{
+                                  padding: '16px 32px',
+                                  backgroundColor: '#059669',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '8px',
+                                  fontSize: '18px',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                                }}
+                              >
+                                📄 Luo virallinen tarjous
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{
+                            textAlign: 'center',
+                            padding: '48px',
+                            color: '#6b7280'
+                          }}>
+                            <div style={{ fontSize: '48px', marginBottom: '16px' }}>💰</div>
+                            <p>Valitse ensin palvelu "Palvelu"-välilehdeltä nähdäksesi hinnoittelun</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Huomiot */}
