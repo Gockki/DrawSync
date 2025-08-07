@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import mantoxLogo from '../assets/mantox-logo.png'
 import { Upload, FileText, BarChart3, LogOut, CheckCircle2, AlertTriangle, Package, Ruler, TrendingUp, Palette, Calculator, Save, FileDown, Edit3, DollarSign, X } from "lucide-react"
 
 // Pinnoitevaihtoehdot
@@ -162,6 +163,11 @@ export default function ModernDrawSyncApp() {
   const [manualSurfaceArea, setManualSurfaceArea] = useState('')
   const [showManualInput, setShowManualInput] = useState(false)
   
+  // New: Save functionality
+  const [saving, setSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  const [savedDrawingId, setSavedDrawingId] = useState(null)
+  
   // Palveluvalinnat
   const [selectedCoating, setSelectedCoating] = useState('')
   const [selectedVariant, setSelectedVariant] = useState('')
@@ -308,6 +314,71 @@ export default function ModernDrawSyncApp() {
     alert(`Tarjous ${quoteNumber} luotu! Kokonaishinta: ${pricing.total.toFixed(2)} €`)
   }
 
+  // NEW: Save project functionality
+const handleSaveProject = async () => {
+  if (!data || !file) {
+    alert("Ei tallennettavaa dataa!")
+    return
+  }
+
+  setSaving(true)
+
+  try {
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error("Käyttäjää ei löydy. Kirjaudu uudelleen.")
+    }
+
+    console.log("✅ user.id:", user.id)
+
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${user.id}/${Date.now()}.${fileExt}`
+    const filePath = fileName 
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('drawings')
+      .upload(filePath, file)
+
+    if (uploadError) throw uploadError
+
+    const { data: urlData } = supabase.storage
+      .from('drawings')
+      .getPublicUrl(filePath)
+
+    const drawingData = {
+      user_id: user.id,
+      filename: file.name,
+      image_url: urlData.publicUrl,
+      product_code: editedData.tuotekoodi || data.perustiedot?.tuotekoodi || null,
+      product_name: editedData.tuotenimi || data.perustiedot?.tuotenimi || null,
+      material: editedData.materiaali || data.perustiedot?.materiaali || null,
+      weight_kg: parseFloat(editedData.paino_kg || data.perustiedot?.paino_kg) || null,
+      surface_area_cm2: data.pinta_ala_analyysi?.pinta_ala_cm2 || null,
+      ocr_data: data.processing_info || {},
+      gpt_analysis: data
+    }
+
+    const { data: savedData, error: dbError } = await supabase
+      .from('drawings')
+      .insert(drawingData)
+      .select()
+
+    if (dbError) throw dbError
+
+    setSavedDrawingId(savedData[0].id)
+    setSaveSuccess(true)
+    setTimeout(() => setSaveSuccess(false), 4000)
+
+    console.log("✅ Tallennus onnistui:", savedData[0])
+  } catch (error) {
+    console.error("❌ Save error:", error)
+    alert("Tallennus epäonnistui: " + error.message)
+  } finally {
+    setSaving(false)
+  }
+}
+
   // Välilehtien määritys
   const tabs = [
     { id: 'perustiedot', name: 'Perustiedot', icon: Package, enabled: true },
@@ -319,6 +390,18 @@ export default function ModernDrawSyncApp() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      {/* Save success notification */}
+      {saveSuccess && (
+        <div className="fixed top-20 right-6 z-50 animate-in slide-in-from-top-2 duration-300">
+          <div className="bg-green-50 border border-green-200 rounded-xl shadow-lg p-4">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              <span className="font-medium text-green-800">Projekti tallennettu!</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Success notification */}
       {success && (
         <div className="fixed top-6 right-6 z-50 animate-in slide-in-from-top-2 duration-300">
@@ -337,7 +420,7 @@ export default function ModernDrawSyncApp() {
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
               <img 
-                src="/src/assets/mantox-logo.png" 
+                src={mantoxLogo}
                 alt="Mantox Solutions" 
                 className="h-12 w-auto"
               />
@@ -1017,9 +1100,19 @@ export default function ModernDrawSyncApp() {
 
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row justify-end gap-4">
-                  <button className="flex items-center justify-center gap-2 px-6 py-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition-all duration-200 shadow-sm">
+                  <button 
+                    onClick={handleSaveProject}
+                    disabled={!data || saving || savedDrawingId}
+                    className={`flex items-center justify-center gap-2 px-6 py-3 font-medium rounded-lg transition-all duration-200 shadow-sm ${
+                      savedDrawingId 
+                        ? 'bg-green-100 text-green-800 border border-green-200 cursor-not-allowed'
+                        : (!data || saving)
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-white border border-gray-300 hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
                     <Save className="h-4 w-4" />
-                    Tallenna luonnos
+                    {saving ? 'Tallennetaan...' : savedDrawingId ? '✅ Tallennettu' : 'Tallenna luonnos'}
                   </button>
                   <button 
                     onClick={generateQuote}
@@ -1057,7 +1150,7 @@ export default function ModernDrawSyncApp() {
               </>
             ) : (
               <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-16 text-center">
-                <div className="text-8xl mb-8"></div>
+                <div className="text-8xl mb-8">📊</div>
                 <h3 className="text-3xl font-bold text-gray-900 mb-4">
                   Ei analyysituloksia
                 </h3>

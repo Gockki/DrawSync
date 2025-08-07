@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom"
 import UploadAndJsonView from "./components/UploadAndJsonView"
 import Login from "./pages/Login"
 import PrivateRoute from "./components/PrivateRoute"
+import Projects from "./pages/Projects" // ⬅️ lisää tämä
 
 function App() {
   return (
@@ -13,6 +14,14 @@ function App() {
           element={
             <PrivateRoute>
               <UploadAndJsonView />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/projektit"
+          element={
+            <PrivateRoute>
+              <Projects />
             </PrivateRoute>
           }
         />

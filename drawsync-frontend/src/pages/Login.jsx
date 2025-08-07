@@ -9,23 +9,39 @@ export default function Login() {
   const [error, setError] = useState('')
   const [isLogin, setIsLogin] = useState(true)
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
-    let result
+const handleSubmit = async (e) => {
+  e.preventDefault()
+  setError('')
+  let result
 
-    if (isLogin) {
-      result = await supabase.auth.signInWithPassword({ email, password })
-    } else {
-      result = await supabase.auth.signUp({ email, password })
+  if (isLogin) {
+    result = await supabase.auth.signInWithPassword({ email, password })
+    
+    if (result.error) {
+      setError(result.error.message)
+      return
     }
+
+    navigate('/app')
+  } else {
+    result = await supabase.auth.signUp({ email, password })
 
     if (result.error) {
       setError(result.error.message)
-    } else {
-      navigate('/app')
+      return
     }
+
+    // ✅ Tsekkaa, pitääkö sähköposti vahvistaa
+    if (result.data.user && !result.data.user.confirmed_at) {
+      alert("Rekisteröinti onnistui! Tarkista sähköpostisi ja vahvista tilisi.")
+      return
+    }
+
+    // Jos vahvistus ei ole käytössä → navigoi suoraan
+    navigate('/app')
   }
+}
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
