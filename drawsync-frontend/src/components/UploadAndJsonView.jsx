@@ -3,6 +3,14 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { 
+  COATING_OPTIONS, 
+  getBatchDiscount, 
+  getUrgencyMultiplier, 
+  calculatePretreatmentCost,
+  ADDITIONAL_COSTS,
+  getDeliveryTime 
+} from '../utils/coatingOptions'
 import NavigationHeader from './NavigationHeader'
 import ProjectsShortcut from './ProjectsShortcut'
 import UploadSection from './UploadSection'
@@ -16,11 +24,9 @@ import PalveluPanel from './PalveluPanel'
 import Hinnoittelupanel from './Hinnoittelupanel'
 import NotesPanel from './NotesPanel'
 import ManualSurfaceAreaModel from './ManualSurfaceAreaModel'
-import ActionButtons from './ActionButtoms'
+import ActionButtons from './ActionButtons'
 import StatusBadge from './StatusBadge'
-
-// --- pinnoitevaihtoehdot, getBatchDiscount, getUrgencyMultiplier, calculatePretreatmentCost ---
-// (Copy exactly what you already have in your big file here)
+import { Upload, FileText, Eye, Package, Calculator, Ruler, TrendingUp, Palette } from 'lucide-react'
 
 export default function UploadAndJsonView() {
   const navigate = useNavigate()
@@ -85,7 +91,7 @@ export default function UploadAndJsonView() {
       const variant = coating.variants.find(v => v.id === selectedVariant)
 
       if (coating && variant) {
-        const setupCost = 50
+        const setupCost = ADDITIONAL_COSTS.setupCost
         const pretreatCost = calculatePretreatmentCost(pretreatments, m2)
         const coatPrice = coating.basePrice * variant.priceMultiplier
         const coatCost = m2 * coatPrice
@@ -94,7 +100,8 @@ export default function UploadAndJsonView() {
         const afterDisc = subtotal - discount
         const urgentMult = getUrgencyMultiplier(urgency)
         const afterUrgency = afterDisc * urgentMult
-        const vat = afterUrgency * 0.24
+        const vat = afterUrgency * ADDITIONAL_COSTS.vatRate
+        
         setPricing({
           surfaceAreaCm2: cm2,
           surfaceAreaM2: parseFloat(m2.toFixed(4)),
@@ -112,7 +119,8 @@ export default function UploadAndJsonView() {
           afterDiscountAndUrgency: parseFloat(afterUrgency.toFixed(2)),
           vat: parseFloat(vat.toFixed(2)),
           total: parseFloat((afterUrgency + vat).toFixed(2)),
-          pretreatments: [...pretreatments]
+          pretreatments: [...pretreatments],
+          deliveryTime: getDeliveryTime(selectedCoating, urgency, batchSize)
         })
       }
     } else {
@@ -121,9 +129,17 @@ export default function UploadAndJsonView() {
   }, [data, editedData, selectedCoating, selectedVariant, batchSize, urgency, pretreatments])
 
   // Handlers
-  const handleFileSelect = (f) => {
+  const handleDrop = (e) => {
+    e.preventDefault()
+    const droppedFile = e.dataTransfer.files[0]
+    if (droppedFile) {
+      handleFileSelect(droppedFile, URL.createObjectURL(droppedFile))
+    }
+  }
+
+  const handleFileSelect = (f, url) => {
     setFile(f)
-    setPreviewUrl(URL.createObjectURL(f))
+    setPreviewUrl(url)
   }
 
   const handleUpload = async () => {
@@ -132,14 +148,23 @@ export default function UploadAndJsonView() {
     form.append('file', file)
     setLoading(true)
     try {
-      const res = await fetch('http://localhost:8000/process', { method: 'POST', body: form, })
+      const res = await fetch('http://localhost:8000/process', { 
+        method: 'POST', 
+        body: form 
+      })
       const json = await res.json()
-      setData(json)
-      setEditedData(json.perustiedot || {})
-      setSuccess(true)
-      setTimeout(() => setSuccess(false), 4000)
+      
+      if (json.success) {
+        setData(json)
+        setEditedData(json.perustiedot || {})
+        setSuccess(true)
+        setTimeout(() => setSuccess(false), 4000)
+      } else {
+        throw new Error(json.error || 'Analyysi epäonnistui')
+      }
     } catch (err) {
       console.error(err)
+      alert(`Virhe analysoinnissa: ${err.message}`)
     } finally {
       setLoading(false)
     }
@@ -153,7 +178,7 @@ export default function UploadAndJsonView() {
       setData(prev => ({
         ...prev,
         pinta_ala_analyysi: {
-          ...prev.pinta_ala_analyysi,
+          ...prev?.pinta_ala_analyysi,
           pinta_ala_cm2: parseFloat(manualSurfaceArea),
           laskelma: 'Manuaalisesti syötetty',
           varmuus: 'manuaalinen'
@@ -171,22 +196,46 @@ export default function UploadAndJsonView() {
   }
 
   const generateQuote = () => {
-    if (!pricing) return alert('Valitse ensin palvelu hinnoittelua varten!')
+    if (!pricing) {
+      alert('Valitse ensin palvelu hinnoittelua varten!')
+      return
+    }
     const num = `FIN-${Date.now().toString().slice(-6)}`
-    alert(`Tarjous ${num} luotu! Kokonaishinta: ${pricing.total.toFixed(2)} €`)
+    const deliveryText = pricing.deliveryTime 
+      ? `${pricing.deliveryTime.min}-${pricing.deliveryTime.max} päivää`
+      : '7-14 päivää'
+    
+    alert(
+      `Tarjous ${num} luotu!\n\n` +
+      `Kokonaishinta: ${pricing.total.toFixed(2)} €\n` +
+      `Toimitusaika: ${deliveryText}\n` +
+      `Palvelu: ${pricing.coating} - ${pricing.variant}`
+    )
   }
 
   const handleSaveProject = async () => {
-    if (!data || !file) return alert('Ei tallennettavaa dataa!')
+    if (!data || !file) {
+      alert('Ei tallennettavaa dataa!')
+      return
+    }
+    
     setSaving(true)
     try {
       const { data: { user }, error: uErr } = await supabase.auth.getUser()
       if (uErr || !user) throw new Error('Kirjaudu uudelleen')
+      
       const ext = file.name.split('.').pop()
       const path = `${user.id}/${Date.now()}.${ext}`
-      const { error: upErr } = await supabase.storage.from('drawings').upload(path, file)
+      
+      const { error: upErr } = await supabase.storage
+        .from('drawings')
+        .upload(path, file)
       if (upErr) throw upErr
-      const { data: urlData } = supabase.storage.from('drawings').getPublicUrl(path)
+      
+      const { data: urlData } = supabase.storage
+        .from('drawings')
+        .getPublicUrl(path)
+      
       const drawingData = {
         user_id: user.id,
         filename: file.name,
@@ -199,11 +248,13 @@ export default function UploadAndJsonView() {
         ocr_data: data.processing_info || {},
         gpt_analysis: data
       }
+      
       const { data: saved, error: dbErr } = await supabase
         .from('drawings')
         .insert(drawingData)
         .select()
       if (dbErr) throw dbErr
+      
       setSavedDrawingId(saved[0].id)
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 4000)
@@ -217,11 +268,36 @@ export default function UploadAndJsonView() {
 
   // Tab definitions
   const tabs = [
-    { id: 'perustiedot', name: 'Perustiedot' },
-    { id: 'mitat', name: 'Mitat' },
-    { id: 'pinta-ala', name: 'Pinta-ala' },
-    { id: 'palvelu', name: 'Palvelu' },
-    { id: 'hinnoittelu', name: 'Hinnoittelu' },
+    { 
+      id: 'perustiedot', 
+      name: 'Perustiedot', 
+      icon: Package,
+      enabled: !!data 
+    },
+    { 
+      id: 'mitat', 
+      name: 'Mitat', 
+      icon: Ruler,
+      enabled: !!data?.mitat 
+    },
+    { 
+      id: 'pinta-ala', 
+      name: 'Pinta-ala', 
+      icon: TrendingUp,
+      enabled: !!data?.pinta_ala_analyysi 
+    },
+    { 
+      id: 'palvelu', 
+      name: 'Palvelu', 
+      icon: Palette,
+      enabled: !!data 
+    },
+    { 
+      id: 'hinnoittelu', 
+      name: 'Hinnoittelu', 
+      icon: Calculator,
+      enabled: !!pricing 
+    },
   ]
 
   return (
@@ -235,23 +311,25 @@ export default function UploadAndJsonView() {
         {/* Left: Upload + Preview */}
         <div className="space-y-6">
           <UploadSection
-          file={file}
-          previewUrl={previewUrl}
-          loading={loading}
-          onDrop={handleDrop}
-          onFileSelect={(f, url) => {
-            setFile(f)
-            setPreviewUrl(url)
-        }}
-        onAnalyze={handleUpload} 
-        />
-      </div>
+            file={file}
+            previewUrl={previewUrl}
+            loading={loading}
+            onDrop={handleDrop}
+            onFileSelect={handleFileSelect}
+            onAnalyze={handleUpload} 
+          />
+        </div>
 
         {/* Right: Results */}
         <div className="space-y-6">
           {data ? (
             <>
-              <StatusOverview data={data} pricing={pricing} />
+              <StatusOverview 
+                success={data.success !== false}
+                filename={file?.name || 'Tuntematon'}
+                hasMeasurement={!!data.mitat}
+                pricing={pricing} 
+              />
 
               <TabNavigation
                 tabs={tabs}
@@ -268,24 +346,24 @@ export default function UploadAndJsonView() {
                 />
               }
               {activeTab === 'mitat' &&
-                <MitatPanel data={data} />
+                <MitatPanel mitat={data.mitat} />
               }
               {activeTab === 'pinta-ala' &&
                 <PintaAlaPanel
-                  data={data}
-                  onManualTrigger={() => setShowManualInput(true)}
+                  pintaAla={data.pinta_ala_analyysi}
+                  pricing={pricing}
+                  onManualClick={() => setShowManualInput(true)}
                 />
               }
               {activeTab === 'palvelu' &&
                 <PalveluPanel
-                  data={data}
-                  coatings={COATING_OPTIONS}
+                  COATING_OPTIONS={COATING_OPTIONS}
                   selectedCoating={selectedCoating}
                   onSelectCoating={setSelectedCoating}
                   selectedVariant={selectedVariant}
                   onSelectVariant={setSelectedVariant}
                   batchSize={batchSize}
-                  onSelectBatch={setBatchSize}
+                  onSelectBatchSize={setBatchSize}
                   urgency={urgency}
                   onSelectUrgency={setUrgency}
                   pretreatments={pretreatments}
@@ -295,18 +373,20 @@ export default function UploadAndJsonView() {
               {activeTab === 'hinnoittelu' &&
                 <Hinnoittelupanel
                   pricing={pricing}
-                  generateQuote={generateQuote}
+                  urgency={urgency}
                 />
               }
 
-              <NotesPanel data={data} />
+              <NotesPanel notes={data.huomiot || data.notes} />
 
               <ActionButtons
-                onSave={handleSaveProject}
+                onSaveProject={handleSaveProject}
+                onGenerateQuote={generateQuote}
+                disabledSave={!data || !file || saving}
+                disabledQuote={!pricing}
                 saving={saving}
-                savedDrawingId={savedDrawingId}
-                onCreateQuote={generateQuote}
-                quoteEnabled={!!pricing}
+                saveSuccess={saveSuccess}
+                pricing={pricing}
               />
 
               {saveSuccess && (
@@ -322,10 +402,11 @@ export default function UploadAndJsonView() {
 
               {showManualInput && (
                 <ManualSurfaceAreaModel
-                  manualValue={manualSurfaceArea}
+                  visible={showManualInput}
+                  manualArea={manualSurfaceArea}
                   onChange={setManualSurfaceArea}
                   onSave={handleManualSurfaceArea}
-                  onCancel={() => setShowManualInput(false)}
+                  onClose={() => setShowManualInput(false)}
                 />
               )}
             </>
@@ -335,9 +416,23 @@ export default function UploadAndJsonView() {
               <h3 className="text-3xl font-bold text-gray-900 mb-4">
                 Ei analyysituloksia
               </h3>
-              <p className="text-xl text-gray-600">
+              <p className="text-xl text-gray-600 mb-8">
                 Lataa ja analysoi piirustus nähdäksesi tulokset
               </p>
+              <div className="flex flex-wrap gap-4 justify-center text-sm text-gray-500">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  <span>PDF, PNG, JPG</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  <span>GPT-5 Vision</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calculator className="h-4 w-4" />
+                  <span>Automaattinen hinnoittelu</span>
+                </div>
+              </div>
             </div>
           )}
         </div>
