@@ -1,4 +1,4 @@
-// Luo uusi tiedosto: src/components/NavigationHeader.jsx
+// src/components/NavigationHeader.jsx
 
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
@@ -28,18 +28,23 @@ export default function NavigationHeader() {
       <div className="container mx-auto px-6 py-4">
         <div className="flex justify-between items-center">
           {/* Logo ja brändi */}
-          <div className="flex items-center gap-4">
-            <img 
-              src={mantoxLogo}
-              alt="Mantox Solutions" 
-              className="h-12 w-auto cursor-pointer"
-              onClick={() => navigate('/app')}
-            />
-            <div className="border-l border-gray-400 pl-4">
-              <p className="text-gray-200 text-lg font-medium">Pinnoitusanalyysi</p>
-              <p className="text-gray-300 text-sm">AI-pohjainen piirustusanalyysi</p>
-            </div>
-          </div>
+<div className="flex items-center gap-4">
+  {/* varaa logolle kiinteä leveys */}
+  <div className="relative h-12 w-[160px] overflow-visible shrink-0">
+    <img
+      src={mantoxLogo}
+      alt="Mantox Solutions"
+      onClick={() => navigate('/app')}
+      className="absolute left-0 top-1/2 -translate-y-1/2 h-full w-auto object-contain cursor-pointer select-none [transform-origin:left] scale-[3.7]"
+    />
+  </div>
+
+  <div className="border-l border-gray-400 pl-4">
+    <p className="text-gray-200 text-lg font-medium">Pinnoitusanalyysi</p>
+    <p className="text-gray-300 text-sm">AI-pohjainen piirustusanalyysi</p>
+  </div>
+</div>
+
           
           {/* Navigaatiolinkit */}
           <nav className="flex items-center gap-2">

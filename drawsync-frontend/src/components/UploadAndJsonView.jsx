@@ -26,6 +26,7 @@ import NotesPanel from './NotesPanel'
 import ManualSurfaceAreaModel from './ManualSurfaceAreaModel'
 import ActionButtons from './ActionButtons'
 import StatusBadge from './StatusBadge'
+import FakeProgressOverlay from "./FakeProgressOverlay";
 import { Upload, FileText, Eye, Package, Calculator, Ruler, TrendingUp, Palette } from 'lucide-react'
 
 export default function UploadAndJsonView() {
@@ -44,6 +45,8 @@ export default function UploadAndJsonView() {
   const [activeTab, setActiveTab] = useState('perustiedot')
   const [manualSurfaceArea, setManualSurfaceArea] = useState('')
   const [showManualInput, setShowManualInput] = useState(false)
+  const [fakeDone, setFakeDone] = useState(false);
+  const [overlayRunId, setOverlayRunId] = useState(0);
 
   // Service selections
   const [selectedCoating, setSelectedCoating] = useState('')
@@ -146,8 +149,14 @@ export default function UploadAndJsonView() {
     if (!file) return
     const form = new FormData()
     form.append('file', file)
+
+    setOverlayRunId((n) => n + 1); 
     setLoading(true)
+    setFakeDone(false)
+
+    const start = performance.now()
     try {
+      await new Promise(requestAnimationFrame);
       const res = await fetch('http://localhost:8000/process', { 
         method: 'POST', 
         body: form 
@@ -165,10 +174,20 @@ export default function UploadAndJsonView() {
     } catch (err) {
       console.error(err)
       alert(`Virhe analysoinnissa: ${err.message}`)
+      setFakeDone(true);
     } finally {
-      setLoading(false)
+      // ÄLÄ sulje overlaytä tässä – anna sen mennä 100% ja kutsua onFinish
+      const MIN_MS = 3000
+      const elapsed = performance.now() - start
+      const waitLeft = Math.max(0, MIN_MS - elapsed)
+      setTimeout(() => setFakeDone(true), waitLeft)
     }
   }
+
+  // Jos data valmistuu nopeasti mutta fakeDone ei ole ehtinyt päivittyä, pakota valmistuminen
+  useEffect(() => {
+    if (loading && data && !fakeDone) setFakeDone(true)
+  }, [data, loading, fakeDone])
 
   const handleFieldEdit = (field, val) =>
     setEditedData(prev => ({ ...prev, [field]: val }))
@@ -437,6 +456,18 @@ export default function UploadAndJsonView() {
           )}
         </div>
       </div>
+
+      {/* Overlay siirretty gridin ulkopuolelle */}
+      <FakeProgressOverlay
+        key={overlayRunId}
+        open={loading}
+        complete={fakeDone}
+        onFinish={() => { setLoading(false); setFakeDone(false); }}
+        gif="/loaders/analysis.gif"
+        message="Analysoidaan piirustusta…"
+        minMs={3000}
+        finishDuration={600}
+      />
     </div>
   )
 }
