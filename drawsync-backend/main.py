@@ -1,14 +1,15 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import sys
 import os
+from pathlib import Path
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from lib.ocr_utils import extract_text_from_image_bytes
-from lib.gpt_utils import extract_structured_data, extract_structured_data_with_vision
+from lib.gpt_utils import extract_structured_data_with_vision
+from pdf_to_png import pdf_first_page_to_png_bytes  # uusi
 
 app = FastAPI()
 
-# CORS (salli frontend-yhteydet)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,34 +22,33 @@ app.add_middleware(
 def root():
     return {"message": "DrawSync backend alive"}
 
-@app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    # TODO: käsittele tiedosto (OCR + GPT)
-    return {"filename": file.filename}
-
 @app.post("/process")
 async def process_image(file: UploadFile = File(...)):
-    """PÄIVITETTY: OCR + Vision yhdistelmä"""
-    
-    image_bytes = await file.read()
-    
+    """GPT-5 multimodaali — tukee PNG/JPG/PDF ilman Poppleria (PyMuPDF)."""
     try:
-        # 1. OCR kuten ennenkin
-        ocr_text = extract_text_from_image_bytes(image_bytes)
-        
-        # 2. UUSI: Enhanced extraction with vision
-        structured = extract_structured_data_with_vision(ocr_text, image_bytes)
-        
-        # Lisää metadata
+        file_bytes = await file.read()
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="Tyhjä tiedosto")
+
+        ext = Path(file.filename).suffix.lower()
+        if ext == ".pdf":
+            image_bytes = pdf_first_page_to_png_bytes(file_bytes, dpi=200)
+        else:
+            # hyväksy peruskuvat
+            if ext not in [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"]:
+                raise HTTPException(status_code=400, detail=f"Tuettu vain PDF/kuva, saatu: {ext or 'tuntematon'}")
+            image_bytes = file_bytes
+
+        structured = extract_structured_data_with_vision(image_bytes)
         structured["success"] = True
         structured["filename"] = file.filename
-        
         return structured
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        # Ultimate fallback
         return {
             "error": f"Processing failed: {str(e)}",
             "success": False,
-            "filename": file.filename
+            "filename": file.filename,
         }
