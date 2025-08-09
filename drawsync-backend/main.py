@@ -4,11 +4,16 @@ import sys
 import os
 from pathlib import Path
 
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from lib.gpt_utils import extract_structured_data_with_vision
 from pdf_to_png import pdf_first_page_to_png_bytes  # uusi
+from routers.quotes import router as quotes_router
+
+
 
 app = FastAPI()
+app.include_router(quotes_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,7 +21,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    
+    
+
 )
+
+
 
 @app.get("/")
 def root():

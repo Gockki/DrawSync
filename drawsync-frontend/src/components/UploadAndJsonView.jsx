@@ -28,6 +28,11 @@ import ActionButtons from './ActionButtons'
 import StatusBadge from './StatusBadge'
 import FakeProgressOverlay from "./FakeProgressOverlay";
 import { Upload, FileText, Eye, Package, Calculator, Ruler, TrendingUp, Palette } from 'lucide-react'
+import { sendQuoteEmail } from "../utils/sendQuote";
+import { buildQuoteHtml } from "../utils/buildQuoteHtml";
+import aiEmpty from '../assets/ai-empty.svg'
+
+
 
 export default function UploadAndJsonView() {
   const navigate = useNavigate()
@@ -214,23 +219,41 @@ export default function UploadAndJsonView() {
       : prev.filter(x => x !== t))
   }
 
-  const generateQuote = () => {
-    if (!pricing) {
-      alert('Valitse ensin palvelu hinnoittelua varten!')
-      return
-    }
-    const num = `FIN-${Date.now().toString().slice(-6)}`
-    const deliveryText = pricing.deliveryTime 
-      ? `${pricing.deliveryTime.min}-${pricing.deliveryTime.max} päivää`
-      : '7-14 päivää'
-    
-    alert(
-      `Tarjous ${num} luotu!\n\n` +
-      `Kokonaishinta: ${pricing.total.toFixed(2)} €\n` +
-      `Toimitusaika: ${deliveryText}\n` +
-      `Palvelu: ${pricing.coating} - ${pricing.variant}`
-    )
+  const generateQuote = async () => {
+  if (!pricing) {
+    alert('Valitse ensin palvelu hinnoittelua varten!');
+    return;
   }
+
+  // Kysy vastaanottaja nopeasti (UI pysyy ennallaan)
+  const defaultTo = import.meta.env.VITE_DEFAULT_QUOTE_TO || 'jere@mantox.fi';
+  const to = window.prompt('Vastaanottajan sähköposti', defaultTo);
+  if (!to) return;
+
+  try {
+    // Rakenna HTML ja lähetä
+    const html = buildQuoteHtml({ pricing, data });
+    const subject = `Tarjous – ${data?.perustiedot?.tuotenimi || data?.perustiedot?.tuotekoodi || 'Mantox'}`;
+
+    const resp = await sendQuoteEmail({
+      to,
+      cc: [],
+      subject,
+      html,
+      replyTo: 'jere@mantox.fi' // halutessa muuta
+    });
+
+    if (resp?.ok) {
+      alert(`Tarjous lähetetty: ${resp.id}`);
+    } else {
+      alert('Lähetys epäonnistui (tuntematon virhe).');
+    }
+  } catch (e) {
+    console.error(e);
+    alert(`Lähetys epäonnistui: ${e.message}`);
+  }
+};
+
 
   const handleSaveProject = async () => {
     if (!data || !file) {
@@ -431,7 +454,15 @@ export default function UploadAndJsonView() {
             </>
           ) : (
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-16 text-center">
-              <div className="text-8xl mb-8">📊</div>
+              <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-full border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-sm">
+  <img
+    src={aiEmpty}
+    alt="AI-analyysi"
+    className="h-12 w-12 object-contain select-none"
+    draggable="false"
+  />
+</div>
+
               <h3 className="text-3xl font-bold text-gray-900 mb-4">
                 Ei analyysituloksia
               </h3>
@@ -445,7 +476,7 @@ export default function UploadAndJsonView() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Eye className="h-4 w-4" />
-                  <span>GPT-5 Vision</span>
+                  <span>GPT-5</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Calculator className="h-4 w-4" />
