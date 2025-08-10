@@ -54,7 +54,7 @@ const handleSubmit = async (e) => {
   <div className="relative inline-block">
     <div className="absolute inset-0 bg-gradient-to-r from-white/60 to-transparent rounded-md blur-sm"></div>
     <img
-      src="/src/assets/mantox-logo.png"
+      src="/src/assets/mantox-logo-musta.png"
       alt="Mantox Logo"
       className="relative h-14"
     />
