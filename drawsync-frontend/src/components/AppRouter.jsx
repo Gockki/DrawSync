@@ -10,6 +10,7 @@ import Projects from '../pages/Projects'
 import Login from '../pages/Login'
 import AdminDashboard from '../pages/adminpage/AdminDashboard'
 import PrivateRoute from './PrivateRoute'
+import OrganizationAdmin from '../pages/OrganizationAdmin'
 
 // Landing page component (for main domain)
 const LandingPage = () => (
@@ -46,18 +47,29 @@ export default function AppRouter() {
   useEffect(() => {
     const hostname = window.location.hostname
     const subdomain = getSubdomain(hostname)
+    const currentPath = window.location.pathname
     
-    console.log('🚀 AppRouter: Determining routing mode...', { hostname, subdomain, organization })
+    console.log('🚀 AppRouter: Determining routing mode...', { hostname, subdomain, organization, loading, currentPath })
 
     if (loading) return
 
     if (subdomain === 'admin') {
+      console.log('👑 Routing mode: ADMIN')
       setRoutingMode('ADMIN')
+    } else if (subdomain && currentPath === '/login') {
+      console.log('🔐 Routing mode: ORGANIZATION_LOGIN (login page in subdomain)')
+      setRoutingMode('ORGANIZATION_LOGIN')
     } else if (subdomain && organization && organization.type !== 'PLATFORM_ADMIN') {
+      console.log('🏢 Routing mode: ORGANIZATION (org found)')
+      setRoutingMode('ORGANIZATION')
+    } else if (subdomain && !organization) {
+      console.log('❌ Routing mode: ORGANIZATION but no org found')
       setRoutingMode('ORGANIZATION')
     } else if (!subdomain) {
+      console.log('🌐 Routing mode: MAIN_SITE')
       setRoutingMode('MAIN_SITE')
     } else {
+      console.log('❓ Routing mode: NOT_FOUND')
       setRoutingMode('NOT_FOUND')
     }
   }, [organization, loading])
@@ -87,8 +99,25 @@ export default function AppRouter() {
     )
   }
 
+  // Organization Login (mantox.pic2data.local/login)
+  if (routingMode === 'ORGANIZATION_LOGIN') {
+    console.log('🔐 Routing to: Organization Login')
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    )
+  }
+
   // Organization App (mantox.pic2data.local, finecom.pic2data.local)
   if (routingMode === 'ORGANIZATION') {
+    // If no organization found, redirect to login
+    if (!organization) {
+      console.log('❌ No organization found for subdomain, redirecting to login')
+      return <Navigate to="/login" replace />
+    }
+    
     console.log('🏢 Routing to: Organization App for', organization.name)
     return (
       <div className="min-h-screen bg-gray-50">
@@ -103,9 +132,19 @@ export default function AppRouter() {
                 </span>
               </div>
               <nav className="flex space-x-4">
-                <a href="/app" className="text-blue-600 hover:text-blue-800">Analysis</a>
-                <a href="/projektit" className="text-gray-600 hover:text-gray-800">Projects</a>
-              </nav>
+  <a href="/app" className="text-blue-600 hover:text-blue-800">Analytiikka</a>
+  <a href="/projektit" className="text-gray-600 hover:text-gray-800">Tarjoukset</a>
+  {/* ✅ DEBUG - näytä organization object */}
+  {console.log('🔍 Navigation debug:', {
+    organization: organization,
+    userRole: organization?.userRole,
+    shouldShowTeam: organization?.userRole === 'owner'
+  })}
+  {/* Näytä Team vain owner rooleille */}
+  {organization?.userRole === 'owner' && (
+    <a href="/team" className="text-gray-600 hover:text-gray-800">Team</a>
+  )}
+</nav>
             </div>
           </div>
         </div>
@@ -123,7 +162,11 @@ export default function AppRouter() {
               <Projects />
             </PrivateRoute>
           } />
-          <Route path="/login" element={<Login />} />
+          <Route path="/team" element={
+            <PrivateRoute>
+              <OrganizationAdmin />
+            </PrivateRoute>
+          } />
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
       </div>

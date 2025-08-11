@@ -53,7 +53,6 @@ export default function UploadAndJsonView() {
   const [manualSurfaceArea, setManualSurfaceArea] = useState('')
   const [showManualInput, setShowManualInput] = useState(false)
   const [fakeDone, setFakeDone] = useState(false);
-  const [overlayRunId, setOverlayRunId] = useState(0);
 
   // Service selections
   const [selectedCoating, setSelectedCoating] = useState('')
@@ -144,7 +143,14 @@ const loadProject = async (projectId) => {
     }
   }, [data, editedData, selectedCoating, selectedVariant, batchSize, urgency, pretreatments])
 
+  useEffect(() => {
+    // Nollaa variant kun coating vaihtuu
+    if (selectedCoating) {
+      setSelectedVariant('')
+    }
+  }, [selectedCoating])
   // Handlers
+
   const handleDrop = (e) => {
     e.preventDefault()
     const droppedFile = e.dataTransfer.files[0]
@@ -163,7 +169,7 @@ const loadProject = async (projectId) => {
     const form = new FormData()
     form.append('file', file)
 
-    setOverlayRunId((n) => n + 1); 
+
     setLoading(true)
     setFakeDone(false)
 
@@ -490,7 +496,6 @@ const handleSaveProject = async () => {
 
       {/* Overlay siirretty gridin ulkopuolelle */}
       <FakeProgressOverlay
-        key={overlayRunId}
         open={loading}
         complete={fakeDone}
         onFinish={() => { setLoading(false); setFakeDone(false); }}

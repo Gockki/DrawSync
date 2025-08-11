@@ -60,7 +60,7 @@ export default function PerustiedotPanel({ data, editedData, onFieldSave }) {
               onSave={(v) => onFieldSave("pinnoite", v)}
             />
             <EditableField
-              label="Pintakarheus"
+              label="Pinnankarheus"
               value={editedData.pintakarheus_ra ?? pd.pintakarheus_ra}
               onSave={(v) => onFieldSave("pintakarheus_ra", v)}
             />

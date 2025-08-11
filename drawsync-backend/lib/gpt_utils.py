@@ -91,15 +91,14 @@ def extract_structured_data_with_vision(image_bytes: bytes) -> dict:
         image_base64 = base64.b64encode(image_bytes).decode("utf-8")
 
         system_prompt = """
-Saat teknisen piirustuksen kuvan. Olet GPT-5 ja sinulla on paremmat vision-kyvyt kuin aiemmilla malleilla.
-Analysoi kuva tarkasti ja tunnista:
+Saat teknisen piirustuksen kuvan.Analysoi kuva tarkasti ja tunnista:
 
 1. PERUSTIEDOT: Tuotekoodit, nimet, materiaalit, painot, asiakastiedot
 2. MITAT: Pituus, leveys, korkeus millimetreinä (tarkkuus tärkeää)
 3. REIÄT: Halkaisijat ja määrät (laske huolellisesti)  
 4. PINTA-ALA: Laske tarkka pinta-ala mitoista (brutto - reiät = netto)
 
-Käytä parannettuja vision-kykyjäsi tunnistamaan pienetkin tekstit ja mitat.
+Käytä parannettuja OCR-kykyjäsi tunnistamaan pienetkin tekstit ja mitat.
 
 Palauta VAIN validi JSON seuraavassa muodossa:
 
@@ -129,7 +128,7 @@ Palauta VAIN validi JSON seuraavassa muodossa:
     "laskelma": "Laskettu mitoista: pituus x leveys",
     "varmuus": "korkea/keskitaso/matala"
   },
-  "huomiot": ["Tärkeät huomiot taulukossa tai piirustuksessa"],
+  "huomiot": ["Tärkeät huomiot taulukossa tai piirustuksessa.Muista ilmoittaa täälläkin mitat euroopassa käytettyjä mittoja],
   "processing_info": {
     "model_used": "gpt-5",
     "confidence": 0.9,

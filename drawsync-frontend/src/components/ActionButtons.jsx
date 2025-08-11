@@ -29,7 +29,7 @@ export default function ActionButtons({
           ? "Tallennetaan..."
           : saveSuccess
           ? "✅ Tallennettu"
-          : "Tallenna luonnos"}
+          : "Tallenna"}
       </button>
 
       <button

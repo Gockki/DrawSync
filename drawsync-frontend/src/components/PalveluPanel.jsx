@@ -77,12 +77,13 @@ export default function PalveluPanel({
               ))}
             </select>
 
-            {selectedVariant && (
-              <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4 text-sm space-y-1">
+          {selectedVariant && COATING_OPTIONS[selectedCoating]?.variants?.find(x => x.id === selectedVariant) && (
+                <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4 text-sm space-y-1">
                 {(() => {
                   const v = COATING_OPTIONS[selectedCoating].variants.find(
                     (x) => x.id === selectedVariant
                   );
+                  if (!v) return null;
                   const price = (
                     COATING_OPTIONS[selectedCoating].basePrice *
                     v.priceMultiplier

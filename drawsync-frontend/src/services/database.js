@@ -6,79 +6,180 @@ class DatabaseService {
     this.supabase = supabase
   }
 
+  // ✅ KORJATTU getUsersInOrganization (poista toinen versio!)
+  async getUsersInOrganization(organizationId) {
+    const { data, error } = await this.supabase
+      .from('user_organization_access')
+      .select('*')  // ← Pelkkä * ilman auth.users joinia
+      .eq('organization_id', organizationId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+    
+    if (error) throw new Error(error.message)
+    return data
+  }
+
+  // ✅ LISÄÄ PUUTTUVA getUserRoleInOrganization
+  async getUserRoleInOrganization(userId, organizationId) {
+    console.log('🔍 getUserRoleInOrganization called with:', { userId, organizationId })
+    const { data, error } = await this.supabase
+      .from('user_organization_access')
+      .select('role')
+      .eq('user_id', userId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'active')
+      .single()
+    console.log('📊 Database query result:', { data, error })
+    
+    if (error) {
+      console.log('No role found for user in organization:', error.message)
+      return null
+    }
+    console.log('✅ Role found:', data.role)
+    return data.role
+  }
+
+  async removeUserFromOrganization(userId, organizationId) {
+    const { error } = await this.supabase
+      .from('user_organization_access')
+      .update({ status: 'inactive' })
+      .eq('user_id', userId)
+      .eq('organization_id', organizationId)
+    
+    if (error) throw new Error(error.message)
+    return true
+  }
+
+  // Invitation management
+  async createInvitation(organizationId, email, role = 'user', invitedBy) {
+    const { data, error } = await this.supabase
+      .from('invitations')
+      .insert({
+        organization_id: organizationId,
+        email_address: email.toLowerCase(),
+        role,
+        invited_by: invitedBy
+      })
+      .select()
+    
+    if (error) throw new Error(error.message)
+    return data[0]
+  }
+
+  async getInvitations(organizationId) {
+    const { data, error } = await this.supabase
+      .from('invitations')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: false })
+    
+    if (error) throw new Error(error.message)
+    return data
+  }
+
+  async getInvitationByToken(token) {
+    const { data, error } = await this.supabase
+      .from('invitations')
+      .select(`
+        *,
+        organization:organizations(*)
+      `)
+      .eq('token', token)
+      .eq('status', 'pending')
+      .gte('expires_at', new Date().toISOString())
+      .single()
+    
+    if (error) return null
+    return data
+  }
+
+  async acceptInvitation(token, userId) {
+    const { data, error } = await this.supabase
+      .from('invitations')
+      .update({
+        status: 'accepted',
+        accepted_at: new Date().toISOString()
+      })
+      .eq('token', token)
+      .select()
+    
+    if (error) throw new Error(error.message)
+    
+    const invitation = data[0]
+    
+    // Add user to organization
+    const { error: accessError } = await this.supabase
+      .from('user_organization_access')
+      .insert({
+        user_id: userId,
+        organization_id: invitation.organization_id,
+        role: invitation.role,
+        status: 'active'
+      })
+    
+    if (accessError) throw new Error(accessError.message)
+    
+    return invitation
+  }
+
+  async deleteInvitation(invitationId) {
+    const { error } = await this.supabase
+      .from('invitations')
+      .delete()
+      .eq('id', invitationId)
+    
+    if (error) throw new Error(error.message)
+    return true
+  }
+
   // Organizations
-async getAllOrganizations() {
-  const { data, error } = await this.supabase
-    .from('organizations')
-    .select(`
-      id,
-      name,
-      slug,
-      industry_type,
-      contact_email,
-      subscription_plan,
-      subscription_status,
-      created_at
-    `)
-    .order('created_at', { ascending: false })
-  
-  if (error) throw new Error(error.message)
-  
-  // Hae user_count ja project_count erikseen jokaiselle orgille
-  const enrichedData = await Promise.all(
-    data.map(async (org) => {
-      // Count users
-      const { count: userCount } = await this.supabase
-        .from('user_organization_access')
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', org.id)
-        .eq('status', 'active')
-      
-      // Count projects
-      const { count: projectCount } = await this.supabase
-        .from('drawings')
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', org.id)
-      
-      return {
-        ...org,
-        user_count: userCount || 0,
-        project_count: projectCount || 0
-      }
-    })
-  )
-  
-  return enrichedData
-}
+  async getAllOrganizations() {
+    const { data, error } = await this.supabase
+      .from('organizations')
+      .select(`
+        id,
+        name,
+        slug,
+        industry_type,
+        contact_email,
+        subscription_plan,
+        subscription_status,
+        created_at
+      `)
+      .order('created_at', { ascending: false })
+    
+    if (error) throw new Error(error.message)
+    return data
+  }
 
-async createOrganization(orgData) {
-  const { data, error } = await this.supabase
-    .from('organizations')
-    .insert({
-      name: orgData.name,
-      slug: orgData.slug,
-      industry_type: orgData.industry_type || 'pinnoitus',
-      contact_email: orgData.contact_email,
-      subscription_plan: orgData.subscription_plan || 'trial',
-      ui_settings: orgData.ui_settings || {},
-      pricing_config: orgData.pricing_config || {}
-    })
-    .select()
-  
-  if (error) throw new Error(error.message)
-  return data[0]
-}
+  async createOrganization(orgData) {
+    const { data, error } = await this.supabase
+      .from('organizations')
+      .insert({
+        name: orgData.name,
+        slug: orgData.slug,
+        industry_type: orgData.industry_type || 'pinnoitus',
+        contact_email: orgData.contact_email,
+        subscription_plan: orgData.subscription_plan || 'trial',
+        ui_settings: orgData.ui_settings || {},
+        pricing_config: orgData.pricing_config || {}
+      })
+      .select()
+    
+    if (error) throw new Error(error.message)
+    return data[0]
+  }
 
-async deleteOrganization(orgId) {
-  // TODO: Add safety checks (no users, no projects)
-  const { error } = await this.supabase
-    .from('organizations')
-    .delete()
-    .eq('id', orgId)
-  
-  if (error) throw new Error(error.message)
-  return true
-}
+  async deleteOrganization(orgId) {
+    const { error } = await this.supabase
+      .from('organizations')
+      .delete()
+      .eq('id', orgId)
+    
+    if (error) throw new Error(error.message)
+    return true
+  }
+
   async getOrganization(orgId) {
     const { data, error } = await this.supabase
       .from('organizations')
@@ -97,7 +198,7 @@ async deleteOrganization(orgId) {
       .eq('slug', slug)
       .single()
     
-    if (error) return null // Not found
+    if (error) return null
     return data
   }
 
@@ -161,7 +262,6 @@ async deleteOrganization(orgId) {
     
     if (error) throw new Error(error.message)
     return true
-  
   }
 }
 

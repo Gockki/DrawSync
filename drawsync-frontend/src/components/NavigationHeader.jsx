@@ -3,6 +3,7 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import mantoxLogo from '../assets/mantox-logo.png'
+import { getSubdomain } from '../utils/subdomain'
 import { 
   Upload, 
   FolderOpen, 
@@ -16,9 +17,23 @@ export default function NavigationHeader() {
   const navigate = useNavigate()
   const location = useLocation()
   
-  const handleLogout = async () => {
+    const handleLogout = async () => {
     await supabase.auth.signOut()
-    navigate('/')
+    
+    // Redirect organisaation mukaan
+    const hostname = window.location.hostname
+    const subdomain = getSubdomain(hostname)
+    
+    if (subdomain && subdomain !== 'admin') {
+      // Organization subdomain → stay in same subdomain but go to login
+      window.location.href = `/login`
+    } else if (subdomain === 'admin') {
+      // Admin → main site login
+      window.location.href = 'http://pic2data.local:5173/login'
+    } else {
+      // Main site → main site login
+      navigate('/login')
+    }
   }
   
   const isActive = (path) => location.pathname === path

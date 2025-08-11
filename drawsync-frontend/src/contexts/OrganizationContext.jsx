@@ -13,17 +13,49 @@ export const OrganizationProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    console.log('🚀 [DEBUG] OrganizationContext useEffect triggered')
     initializeAuth()
-  }, [])
+  }, [window.location.hostname])
 
-  const initializeAuth = async () => {
+useEffect(() => {
+  const handleLocationChange = () => {
+    console.log('🔄 Location changed, reinitializing auth...')
+    initializeAuth()
+  }
+  
+  // Listen URL changes
+  window.addEventListener('popstate', handleLocationChange)
+  
+  return () => {
+    window.removeEventListener('popstate', handleLocationChange)
+  }
+}, [])
+
+const initializeAuth = async () => {
+    console.log('🚀 [DEBUG] initializeAuth CALLED')
+    console.log('🌍 Current URL:', window.location.href)
   try {
     console.log('🔄 OrganizationContext: Initializing auth...')
+    console.log('🌍 Window location:', window.location.hostname, window.location.pathname)
+    // 1. Try current session
+    let { data: { user }, error } = await supabase.auth.getUser()
+    console.log('🔍 Auth check result:', { user: user?.email, error })
     
-    // Get current user
-    const { data: { user }, error } = await supabase.auth.getUser()
+    if (!user) {
+      console.log('❌ No user - early return')
+      const hostname = window.location.hostname
+      const subdomain = getSubdomain(hostname)
+      
+      if (subdomain && subdomain !== 'admin') {
+        console.log('🔄 No session in subdomain, checking main domain...')
+        console.log('❌ No session found, need to login')
+        setLoading(false)
+        return
+      }
+    }
     
     if (error || !user) {
+      console.log('❌ No user found - early return')
       console.log('❌ No user found')
       setLoading(false)
       return
@@ -35,7 +67,11 @@ export const OrganizationProvider = ({ children }) => {
     // Check subdomain first
     const hostname = window.location.hostname
     const subdomain = getSubdomain(hostname)
+    console.log('🌐 Current subdomain:', subdomain)
+
+    console.log('🔍 About to call getOrganizationFromSubdomain...')
     const subdomainOrg = await getOrganizationFromSubdomain(subdomain)
+    console.log('🏢 Organization from subdomain:', subdomainOrg)
     
     if (subdomainOrg === 'PLATFORM_ADMIN') {
       console.log('👑 Platform admin mode')
@@ -46,7 +82,19 @@ export const OrganizationProvider = ({ children }) => {
 
     if (subdomainOrg) {
       console.log('🏢 Subdomain organization found:', subdomainOrg.name)
-      setOrganization(subdomainOrg)
+      console.log('🔍 About to get user role...')
+      
+      // ✅ HAE USER:N ROOLI ORGANISAATIOSSA
+      console.log('🔍 Getting user role for user:', user.id, 'in org:', subdomainOrg.id)
+
+      const userRole = await db.getUserRoleInOrganization(user.id, subdomainOrg.id)
+      console.log('👤 User role in organization:', userRole, 'for user:', user.id, 'in org:', subdomainOrg.id)
+      const orgWithRole = {
+    ...subdomainOrg,
+    userRole 
+  }
+      console.log('📊 Final organization object:', orgWithRole)
+      setOrganization(orgWithRole)
       setOrganizations([subdomainOrg])
       setLoading(false)
       return
@@ -57,7 +105,6 @@ export const OrganizationProvider = ({ children }) => {
     const userOrganizations = await db.getUserOrganizations(user.id)
     setOrganizations(userOrganizations)
 
-    // Set default organization (first one)
     if (userOrganizations.length > 0) {
       console.log('✅ Setting default org:', userOrganizations[0].name)
       setOrganization(userOrganizations[0])

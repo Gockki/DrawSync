@@ -8,10 +8,12 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLogin, setIsLogin] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
 
 const handleSubmit = async (e) => {
   e.preventDefault()
   setError('')
+  setIsLoading(true)
   let result
 
   if (isLogin) {
@@ -19,29 +21,37 @@ const handleSubmit = async (e) => {
     
     if (result.error) {
       setError(result.error.message)
+      setIsLoading(false)
       return
     }
 
-    navigate('/app')
-  } else {
-    result = await supabase.auth.signUp({ email, password })
+    console.log('🔐 Login successful, navigating in 500ms...')
+    
+    setTimeout(() => {
+      console.log('🚀 Attempting navigation to /app')
+      window.location.href = '/app'
+}, 500)
+      
+    } else {
+      result = await supabase.auth.signUp({ email, password })
 
-    if (result.error) {
-      setError(result.error.message)
-      return
+      if (result.error) {
+        setError(result.error.message)
+        setIsLoading(false)
+        return
+      }
+
+      if (result.data.user && !result.data.user.confirmed_at) {
+        alert("Rekisteröinti onnistui! Tarkista sähköpostisi ja vahvista tilisi.")
+        setIsLoading(false)
+        return
+      }
+
+      setTimeout(() => {
+        navigate('/app')
+      }, 500)
     }
-
-    // ✅ Tsekkaa, pitääkö sähköposti vahvistaa
-    if (result.data.user && !result.data.user.confirmed_at) {
-      alert("Rekisteröinti onnistui! Tarkista sähköpostisi ja vahvista tilisi.")
-      return
-    }
-
-    // Jos vahvistus ei ole käytössä → navigoi suoraan
-    navigate('/app')
   }
-}
-
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -50,17 +60,17 @@ const handleSubmit = async (e) => {
         className="bg-gradient-to-br from-[#999] via-[#777] to-[#555] text-white w-full max-w-md min-w-[320px] rounded-xl shadow-lg p-10 space-y-6"
       >
         {/* Logo ja otsikko */}
-<div className="flex flex-col items-center mb-4">
-  <div className="relative inline-block">
-    <div className="absolute inset-0 bg-gradient-to-r from-white/60 to-transparent rounded-md blur-sm"></div>
-    <img
-      src="/src/assets/mantox-logo-musta.png"
-      alt="Mantox Logo"
-      className="relative h-14"
-    />
-  </div>
-  <div className="w-full h-[2px] bg-[#ff5757] rounded mt-3"></div>
-</div>
+        <div className="flex flex-col items-center mb-4">
+          <div className="relative inline-block">
+            <div className="absolute inset-0 bg-gradient-to-r from-white/60 to-transparent rounded-md blur-sm"></div>
+            <img
+              src="/src/assets/mantox-logo-musta.png"
+              alt="Mantox Logo"
+              className="relative h-14"
+            />
+          </div>
+          <div className="w-full h-[2px] bg-[#ff5757] rounded mt-3"></div>
+        </div>
 
         {/* Sähköposti */}
         <div className="space-y-2">
@@ -98,9 +108,10 @@ const handleSubmit = async (e) => {
         {/* Kirjaudu-painike */}
         <button
           type="submit"
-          className="w-full py-2 px-4 bg-white text-[#737373] font-semibold rounded-md hover:bg-[#ff5757]/90 transition"
+          disabled={isLoading}
+          className="w-full py-2 px-4 bg-white text-[#737373] font-semibold rounded-md hover:bg-[#ff5757]/90 transition disabled:opacity-50"
         >
-          {isLogin ? 'Kirjaudu' : 'Rekisteröidy'}
+          {isLoading ? 'Kirjaudutaan...' : (isLogin ? 'Kirjaudu' : 'Rekisteröidy')}
         </button>
 
         {/* Vaihtolinkki */}

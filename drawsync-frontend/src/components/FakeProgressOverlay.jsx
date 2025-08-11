@@ -59,55 +59,67 @@ export default function FakeProgressOverlay({
     return (schedule.at(-1)?.to ?? 0.93) * 100;
   };
 
-  useEffect(() => {
-    cancelAnimationFrame(rafRef.current);
+// FakeProgressOverlay.jsx - korvaa useEffect:
+useEffect(() => {
+  console.log('🔄 FakeProgressOverlay useEffect triggered:', { open, complete, finishDuration })
+  
+  cancelAnimationFrame(rafRef.current);
 
-    if (!open) {
-      setVisible(false);
-      setProgress(0);
-      return;
-    }
+  if (!open) {
+    console.log('❌ Not open, hiding overlay')
+    setVisible(false);
+    setProgress(0);
+    return;
+  }
 
+  // ✅ TÄMÄ ON RATKAISU:
+  // Aloita uusi animaatio VAIN jos overlay ei ole vielä visible
+  // TAI jos ollaan sulkemassa ja avaamassa uudelleen
+  if (!visible) {
+    console.log('✅ Starting NEW progress animation (overlay was not visible)')
     setVisible(true);
     setProgress(0);
     startRef.current = performance.now();
     finishingRef.current = false;
+  } else {
+    console.log('🔄 Overlay already visible, continuing existing animation')
+  }
 
-    const maxHold = (planRef.current.at(-1)?.to ?? 0.93) * 100;
+  const maxHold = (planRef.current.at(-1)?.to ?? 0.93) * 100;
 
-    const tick = () => {
-      const now = performance.now();
-      const elapsed = now - startRef.current;
+  const tick = () => {
+    const now = performance.now();
+    const elapsed = now - startRef.current;
 
-      if (!finishingRef.current) {
-        const base = Math.min(baseFromElapsed(elapsed), maxHold);
-        setProgress((p) => (base > p ? base : p));
+    if (!finishingRef.current) {
+      const base = Math.min(baseFromElapsed(elapsed), maxHold);
+      setProgress((p) => (base > p ? base : p));
 
-        if (complete && base >= maxHold - 0.01) {
-          finishingRef.current = true;
-          finishStartRef.current = now;
-        }
-      } else {
-        const t = Math.min(1, (now - finishStartRef.current) / finishDuration);
-        const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
-        setProgress(maxHold + (100 - maxHold) * eased);
-
-        if (t >= 1) {
-          setTimeout(() => {
-            onFinish?.();
-            setVisible(false);
-            setProgress(0);
-          }, 80);
-          return; // lopeta looppi
-        }
+      if (complete && base >= maxHold - 0.01) {
+        finishingRef.current = true;
+        finishStartRef.current = now;
       }
+    } else {
+      const t = Math.min(1, (now - finishStartRef.current) / finishDuration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setProgress(maxHold + (100 - maxHold) * eased);
 
-      rafRef.current = requestAnimationFrame(tick);
-    };
+      if (t >= 1) {
+        setTimeout(() => {
+          onFinish?.();
+          setVisible(false);
+          setProgress(0);
+        }, 80);
+        return;
+      }
+    }
 
     rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [open, complete, finishDuration]); // HUOM: schedule ei ole riippuvuus
+  };
+
+  rafRef.current = requestAnimationFrame(tick);
+  return () => cancelAnimationFrame(rafRef.current);
+}, [open, complete, finishDuration, visible]); // ← Lisää visible dependency// HUOM: schedule ei ole riippuvuus
 
   if (!visible) return null;
 
