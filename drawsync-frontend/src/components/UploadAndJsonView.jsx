@@ -31,6 +31,8 @@ import { Upload, FileText, Eye, Package, Calculator, Ruler, TrendingUp, Palette 
 import { sendQuoteEmail } from "../utils/sendQuote";
 import { buildQuoteHtml } from "../utils/buildQuoteHtml";
 import aiEmpty from '../assets/ai-empty.svg'
+import { useOrganization } from "../contexts/OrganizationContext"
+import { db } from "../services/database"
 
 
 
@@ -60,6 +62,7 @@ export default function UploadAndJsonView() {
   const [urgency, setUrgency] = useState('normaali')
   const [pretreatments, setPretreatments] = useState([])
   const [pricing, setPricing] = useState(null)
+  const { organization, user } = useOrganization()
 
   // AUTH + load project
   useEffect(() => {
@@ -73,13 +76,15 @@ export default function UploadAndJsonView() {
     }
   }, [navigate])
 
-  const loadProject = async (projectId) => {
-    const { data: project, error } = await supabase
-      .from('drawings')
-      .select('*')
-      .eq('id', projectId)
-      .single()
-    if (!error && project) {
+const loadProject = async (projectId) => {
+  if (!organization || !user) return
+  
+  try {
+    // Hae kaikki käyttäjän projektit ja etsi oikea ID
+    const projects = await db.getDrawings(organization.id, user.id)
+    const project = projects.find(p => p.id === projectId)
+    
+    if (project) {
       setData(project.gpt_analysis)
       setEditedData(project.gpt_analysis?.perustiedot || {})
       setPreviewUrl(project.image_url)
@@ -87,7 +92,10 @@ export default function UploadAndJsonView() {
       setSuccess(true)
       setTimeout(() => setSuccess(false), 4000)
     }
+  } catch (error) {
+    console.error('Load project error:', error)
   }
+}
 
   // Pricing effect
   useEffect(() => {
@@ -255,58 +263,50 @@ export default function UploadAndJsonView() {
 };
 
 
-  const handleSaveProject = async () => {
-    if (!data || !file) {
-      alert('Ei tallennettavaa dataa!')
-      return
+const handleSaveProject = async () => {
+  if (!data || !file || !organization || !user) {
+    alert('Ei tallennettavaa dataa!')
+    return
+  }
+  
+  setSaving(true)
+  try {
+    const ext = file.name.split('.').pop()
+    const path = `${user.id}/${Date.now()}.${ext}`
+    
+    const { error: upErr } = await supabase.storage
+      .from('drawings')
+      .upload(path, file)
+    if (upErr) throw upErr
+    
+    const { data: urlData } = supabase.storage
+      .from('drawings')
+      .getPublicUrl(path)
+    
+    const drawingData = {
+      filename: file.name,
+      image_url: urlData.publicUrl,
+      product_code: editedData.tuotekoodi || data.perustiedot?.tuotekoodi || null,
+      product_name: editedData.tuotenimi || data.perustiedot?.tuotenimi || null,
+      material: editedData.materiaali || data.perustiedot?.materiaali || null,
+      weight_kg: parseFloat(editedData.paino_kg || data.perustiedot?.paino_kg) || null,
+      surface_area_cm2: data.pinta_ala_analyysi?.pinta_ala_cm2 || null,
+      ocr_data: data.processing_info || {},
+      gpt_analysis: data
     }
     
-    setSaving(true)
-    try {
-      const { data: { user }, error: uErr } = await supabase.auth.getUser()
-      if (uErr || !user) throw new Error('Kirjaudu uudelleen')
-      
-      const ext = file.name.split('.').pop()
-      const path = `${user.id}/${Date.now()}.${ext}`
-      
-      const { error: upErr } = await supabase.storage
-        .from('drawings')
-        .upload(path, file)
-      if (upErr) throw upErr
-      
-      const { data: urlData } = supabase.storage
-        .from('drawings')
-        .getPublicUrl(path)
-      
-      const drawingData = {
-        user_id: user.id,
-        filename: file.name,
-        image_url: urlData.publicUrl,
-        product_code: editedData.tuotekoodi || data.perustiedot?.tuotekoodi || null,
-        product_name: editedData.tuotenimi || data.perustiedot?.tuotenimi || null,
-        material: editedData.materiaali || data.perustiedot?.materiaali || null,
-        weight_kg: parseFloat(editedData.paino_kg || data.perustiedot?.paino_kg) || null,
-        surface_area_cm2: data.pinta_ala_analyysi?.pinta_ala_cm2 || null,
-        ocr_data: data.processing_info || {},
-        gpt_analysis: data
-      }
-      
-      const { data: saved, error: dbErr } = await supabase
-        .from('drawings')
-        .insert(drawingData)
-        .select()
-      if (dbErr) throw dbErr
-      
-      setSavedDrawingId(saved[0].id)
-      setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 4000)
-    } catch (err) {
-      console.error(err)
-      alert(`Tallennus epäonnistui: ${err.message}`)
-    } finally {
-      setSaving(false)
-    }
+    const saved = await db.saveDrawing(organization.id, user.id, drawingData)
+    
+    setSavedDrawingId(saved.id)
+    setSaveSuccess(true)
+    setTimeout(() => setSaveSuccess(false), 4000)
+  } catch (err) {
+    console.error(err)
+    alert(`Tallennus epäonnistui: ${err.message}`)
+  } finally {
+    setSaving(false)
   }
+}
 
   // Tab definitions
   const tabs = [

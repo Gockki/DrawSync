@@ -2,6 +2,8 @@ import { useEffect, useState } from "react"
 import { supabase } from "../supabaseClient"
 import { useNavigate } from "react-router-dom"
 import NavigationHeader from "../components/NavigationHeader";
+import { useOrganization } from "../contexts/OrganizationContext"
+import { db } from "../services/database"
 import { 
   FileText, 
   CalendarDays, 
@@ -26,6 +28,7 @@ export default function Projects() {
   const [sortBy, setSortBy] = useState("created_at")
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const navigate = useNavigate()
+  const { organization, user } = useOrganization()
 
   useEffect(() => {
     fetchProjects()
@@ -56,39 +59,44 @@ export default function Projects() {
     setFilteredProjects(filtered)
   }, [projects, searchTerm, sortBy])
 
-  const fetchProjects = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      navigate("/")
-      return
-    }
-
-    const { data, error } = await supabase
-      .from("drawings")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("Virhe haettaessa projekteja:", error)
-    } else {
-      setProjects(data || [])
-    }
-
+  // Projects.jsx - fetchProjects funktio
+const fetchProjects = async () => {
+  if (!organization || !user) {
     setLoading(false)
+    return
   }
 
-  const handleDelete = async (id) => {
-    const { error } = await supabase
-      .from("drawings")
-      .delete()
-      .eq("id", id)
-
-    if (!error) {
-      setProjects(projects.filter(p => p.id !== id))
-      setDeleteConfirm(null)
-    }
+  try {
+    const data = await db.getDrawings(organization.id, user.id)
+    setProjects(data || [])
+  } catch (error) {
+    console.error("Virhe haettaessa projekteja:", error)
+    setProjects([])
   }
+
+  setLoading(false)
+}
+
+const handleDelete = async (id) => {
+  console.log('🗑️ Deleting project:', id)
+  
+  const { error } = await supabase
+    .from("drawings")
+    .delete()
+    .eq("id", id)
+
+  console.log('❌ Delete error:', error)
+  
+  if (!error) {
+    console.log('✅ Delete successful, fetching projects...')
+    await fetchProjects()  // ← Lisää await!
+    console.log('📊 Projects fetched')
+    setDeleteConfirm(null)
+  } else {
+    console.error('Delete failed:', error)
+    alert('Poisto epäonnistui: ' + error.message)
+  }
+}
 
   const openProject = (projectId) => {
     sessionStorage.setItem('loadProjectId', projectId)

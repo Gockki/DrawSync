@@ -7,6 +7,78 @@ class DatabaseService {
   }
 
   // Organizations
+async getAllOrganizations() {
+  const { data, error } = await this.supabase
+    .from('organizations')
+    .select(`
+      id,
+      name,
+      slug,
+      industry_type,
+      contact_email,
+      subscription_plan,
+      subscription_status,
+      created_at
+    `)
+    .order('created_at', { ascending: false })
+  
+  if (error) throw new Error(error.message)
+  
+  // Hae user_count ja project_count erikseen jokaiselle orgille
+  const enrichedData = await Promise.all(
+    data.map(async (org) => {
+      // Count users
+      const { count: userCount } = await this.supabase
+        .from('user_organization_access')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', org.id)
+        .eq('status', 'active')
+      
+      // Count projects
+      const { count: projectCount } = await this.supabase
+        .from('drawings')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', org.id)
+      
+      return {
+        ...org,
+        user_count: userCount || 0,
+        project_count: projectCount || 0
+      }
+    })
+  )
+  
+  return enrichedData
+}
+
+async createOrganization(orgData) {
+  const { data, error } = await this.supabase
+    .from('organizations')
+    .insert({
+      name: orgData.name,
+      slug: orgData.slug,
+      industry_type: orgData.industry_type || 'pinnoitus',
+      contact_email: orgData.contact_email,
+      subscription_plan: orgData.subscription_plan || 'trial',
+      ui_settings: orgData.ui_settings || {},
+      pricing_config: orgData.pricing_config || {}
+    })
+    .select()
+  
+  if (error) throw new Error(error.message)
+  return data[0]
+}
+
+async deleteOrganization(orgId) {
+  // TODO: Add safety checks (no users, no projects)
+  const { error } = await this.supabase
+    .from('organizations')
+    .delete()
+    .eq('id', orgId)
+  
+  if (error) throw new Error(error.message)
+  return true
+}
   async getOrganization(orgId) {
     const { data, error } = await this.supabase
       .from('organizations')
@@ -89,6 +161,7 @@ class DatabaseService {
     
     if (error) throw new Error(error.message)
     return true
+  
   }
 }
 
