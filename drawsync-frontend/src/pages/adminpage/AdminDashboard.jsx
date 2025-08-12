@@ -1,4 +1,4 @@
-// src/pages/admin/AdminDashboard.jsx
+// src/pages/adminpage/AdminDashboard.jsx
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
@@ -7,38 +7,62 @@ import {
   BarChart3, 
   Settings,
   Plus,
-  Search
 } from 'lucide-react'
 import { db } from '../../services/database'
+import { supabase } from '../../supabaseClient'
 
 export default function AdminDashboard() {
-  const [organizations, setOrganizations] = useState([])
-  const [users, setUsers] = useState([])
+  const [authLoading, setAuthLoading] = useState(true)
+  const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('organizations')
   const navigate = useNavigate()
 
   useEffect(() => {
-    // TODO: Check if user is platform admin
-    loadDashboardData()
+    checkAdminAuth()
   }, [])
 
-  const loadDashboardData = async () => {
+  const checkAdminAuth = async () => {
     try {
-      // TODO: Platform admin specific data loading
-      setLoading(false)
+      const { data: { user }, error } = await supabase.auth.getUser()
+      
+      if (error || !user) {
+        navigate('/login')
+        return
+      }
+
+      // ✅ Tarkista onko käyttäjä platform admin
+      const { data: adminCheck, error: adminError } = await supabase
+        .from('platform_admins')
+        .select('user_id')
+        .eq('user_id', user.id)
+        .single()
+
+      if (adminError || !adminCheck) {
+        // Not a platform admin - redirect
+        alert('Access denied: Platform admin required')
+        navigate('/')
+        return
+      }
+
+      console.log('✅ Platform admin verified:', user.email)
+      setUser(user)
+      
     } catch (error) {
-      console.error('Failed to load admin data:', error)
+      console.error('Admin auth check failed:', error)
+      navigate('/login')
+    } finally {
+      setAuthLoading(false)
       setLoading(false)
     }
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto mb-4" />
-          <p className="text-gray-600">Loading admin dashboard...</p>
+          <p className="text-gray-600">Checking admin access...</p>
         </div>
       </div>
     )
@@ -52,15 +76,17 @@ export default function AdminDashboard() {
           <div className="flex justify-between items-center py-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">System Admin</h1>
-              <p className="text-sm text-gray-600">DrawSync Platform Management</p>
+              <p className="text-sm text-gray-600">Pic2Data Platform Management</p>
             </div>
             <div className="flex items-center gap-4">
-              <button className="btn-secondary">Settings</button>
+              <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+                Settings
+              </button>
               <button 
-                onClick={() => navigate('/app')}
-                className="btn-primary"
+                onClick={() => navigate('/')}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
               >
-                Back to App
+                Back to Main
               </button>
             </div>
           </div>
@@ -102,7 +128,8 @@ export default function AdminDashboard() {
     </div>
   )
 }
-// Lisää tämä ENNEN OrganizationsTab komponenttia:
+
+// CreateOrganizationModal component
 const CreateOrganizationModal = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     name: '',
@@ -189,7 +216,7 @@ const CreateOrganizationModal = ({ isOpen, onClose, onSuccess }) => {
               placeholder="e.g. finecom"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Will be accessible at: {formData.slug}.drawsync.fi
+              Will be accessible at: {formData.slug}.pic2data.local
             </p>
           </div>
 
@@ -244,7 +271,8 @@ const CreateOrganizationModal = ({ isOpen, onClose, onSuccess }) => {
     </div>
   )
 }
-// Placeholder components - we'll build these next
+
+// Tab components
 const OrganizationsTab = () => {
   const [organizations, setOrganizations] = useState([])
   const [loading, setLoading] = useState(true)
@@ -265,7 +293,6 @@ const OrganizationsTab = () => {
     }
   }
 
-  // ✅ LISÄÄ TÄMÄ FUNKTIO:
   const handleCreateSuccess = () => {
     loadOrganizations() // Reload list
   }
@@ -278,7 +305,6 @@ const OrganizationsTab = () => {
     )
   }
 
-  // ✅ KORVAA RETURN-OSIO TÄLLÄ:
   return (
     <>
       <div className="bg-white rounded-lg shadow">

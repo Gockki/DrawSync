@@ -34,8 +34,6 @@ import aiEmpty from '../assets/ai-empty.svg'
 import { useOrganization } from "../contexts/OrganizationContext"
 import { db } from "../services/database"
 
-
-
 export default function UploadAndJsonView() {
   const navigate = useNavigate()
 
@@ -233,41 +231,44 @@ const loadProject = async (projectId) => {
       : prev.filter(x => x !== t))
   }
 
-  const generateQuote = async () => {
-  if (!pricing) {
-    alert('Valitse ensin palvelu hinnoittelua varten!');
-    return;
-  }
-
-  // Kysy vastaanottaja nopeasti (UI pysyy ennallaan)
-  const defaultTo = import.meta.env.VITE_DEFAULT_QUOTE_TO || 'jere@mantox.fi';
-  const to = window.prompt('Vastaanottajan sähköposti', defaultTo);
-  if (!to) return;
-
-  try {
-    // Rakenna HTML ja lähetä
-    const html = buildQuoteHtml({ pricing, data });
-    const subject = `Tarjous – ${data?.perustiedot?.tuotenimi || data?.perustiedot?.tuotekoodi || 'Mantox'}`;
-
-    const resp = await sendQuoteEmail({
-      to,
-      cc: [],
-      subject,
-      html,
-      replyTo: 'jere@mantox.fi' // halutessa muuta
-    });
-
-    if (resp?.ok) {
-      alert(`Tarjous lähetetty: ${resp.id}`);
-    } else {
-      alert('Lähetys epäonnistui (tuntematon virhe).');
+  // ✅ Updated generateQuote function to accept parameters
+  const generateQuote = async (recipientEmail, emailSubject, emailMessage) => {
+    if (!pricing) {
+      throw new Error('Valitse ensin palvelu hinnoittelua varten!');
     }
-  } catch (e) {
-    console.error(e);
-    alert(`Lähetys epäonnistui: ${e.message}`);
-  }
-};
 
+    try {
+      // Rakenna HTML viesti
+      const html = buildQuoteHtml({ pricing, data });
+      
+      // Käytä parametreja jos annettu, muuten fallback
+      const to = recipientEmail || import.meta.env.VITE_DEFAULT_QUOTE_TO || 'jere@mantox.fi';
+      const subject = emailSubject || `Tarjous – ${data?.perustiedot?.tuotenimi || data?.perustiedot?.tuotekoodi || 'Mantox'}`;
+      
+      // Combine custom message with HTML quote
+      let finalHtml = html;
+      if (emailMessage) {
+        finalHtml = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5;color:#111;white-space:pre-line;margin-bottom:24px;">${emailMessage}</div>${html}`;
+      }
+
+      const resp = await sendQuoteEmail({
+        to,
+        cc: [],
+        subject,
+        html: finalHtml,
+        replyTo: 'jere@mantox.fi'
+      });
+
+      if (resp?.ok) {
+        alert(`Tarjous lähetetty: ${resp.id}`);
+      } else {
+        throw new Error('Lähetys epäonnistui (tuntematon virhe).');
+      }
+    } catch (err) {
+      console.error('Quote generation error:', err);
+      throw err;
+    }
+  };
 
 const handleSaveProject = async () => {
   if (!data || !file || !organization || !user) {
@@ -427,6 +428,7 @@ const handleSaveProject = async () => {
 
               <NotesPanel notes={data.huomiot || data.notes} />
 
+              {/* ✅ Updated ActionButtons with new props */}
               <ActionButtons
                 onSaveProject={handleSaveProject}
                 onGenerateQuote={generateQuote}
@@ -435,6 +437,8 @@ const handleSaveProject = async () => {
                 saving={saving}
                 saveSuccess={saveSuccess}
                 pricing={pricing}
+                analysisData={data}
+                organization={organization}
               />
 
               {saveSuccess && (

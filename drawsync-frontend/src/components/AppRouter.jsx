@@ -110,15 +110,10 @@ export default function AppRouter() {
     return (
       <Routes>
         <Route path="*" element={
-          <PrivateRoute>
+          
             <AdminDashboard />
-          </PrivateRoute>
-        } />  
-      <Route path="/admin" element={
-        <PrivateRoute>
-          <AdminDashboard />
-        </PrivateRoute>
-      } />
+          
+        } />
 
 
     </Routes>
