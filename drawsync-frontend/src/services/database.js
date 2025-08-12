@@ -77,50 +77,96 @@ class DatabaseService {
     return data
   }
 
-  async getInvitationByToken(token) {
-    const { data, error } = await this.supabase
-      .from('invitations')
-      .select(`
-        *,
-        organization:organizations(*)
-      `)
-      .eq('token', token)
-      .eq('status', 'pending')
-      .gte('expires_at', new Date().toISOString())
+// database.js - korjattu getInvitationByToken:
+async getInvitationByToken(token) {
+  console.log('🔍 Looking for invitation with token:', token)
+  
+  // Yksinkertainen query ilman date filtering:iä ensin
+  const { data, error } = await this.supabase
+    .from('invitations')
+    .select('*')
+    .eq('token', token)
+    .eq('status', 'pending')
+  
+  console.log('📊 Query result:', { data, error, count: data?.length })
+  
+  if (error) {
+    console.log('❌ Query error:', error.message)
+    return null
+  }
+  
+  if (!data || data.length === 0) {
+    console.log('❌ No invitations found')
+    return null
+  }
+  
+  const invitation = data[0]
+  console.log('✅ Found invitation:', invitation)
+  
+  // Check expiry manually
+  const now = new Date()
+  const expiresAt = new Date(invitation.expires_at)
+  if (expiresAt < now) {
+    console.log('❌ Invitation expired')
+    return null
+  }
+  
+  // Hae organization erikseen
+  try {
+    const { data: orgData, error: orgError } = await this.supabase
+      .from('organizations')
+      .select('*')
+      .eq('id', invitation.organization_id)
       .single()
     
-    if (error) return null
-    return data
+    if (!orgError && orgData) {
+      invitation.organization = orgData
+      console.log('✅ Added organization:', orgData.name)
+    }
+  } catch (orgError) {
+    console.error('Failed to load organization:', orgError)
   }
+  
+  return invitation
+}
 
-  async acceptInvitation(token, userId) {
-    const { data, error } = await this.supabase
-      .from('invitations')
-      .update({
-        status: 'accepted',
-        accepted_at: new Date().toISOString()
-      })
-      .eq('token', token)
-      .select()
-    
-    if (error) throw new Error(error.message)
-    
-    const invitation = data[0]
-    
-    // Add user to organization
-    const { error: accessError } = await this.supabase
-      .from('user_organization_access')
-      .insert({
-        user_id: userId,
-        organization_id: invitation.organization_id,
-        role: invitation.role,
-        status: 'active'
-      })
-    
-    if (accessError) throw new Error(accessError.message)
-    
-    return invitation
+async acceptInvitation(token, userId) {
+  console.log('🔍 acceptInvitation called with:', { token, userId })
+  
+  // Hae invitation ensin
+  const invitation = await this.getInvitationByToken(token)
+  console.log('🔍 Found invitation:', invitation)
+  
+  if (!invitation) {
+    throw new Error('Invitation not found or expired')
   }
+  
+  // Update invitation status
+  const { data, error } = await this.supabase
+    .from('invitations')
+    .update({
+      status: 'accepted',
+      accepted_at: new Date().toISOString()
+    })
+    .eq('token', token)
+    .select()
+  
+  if (error) throw new Error(error.message)
+  
+  // Add user to organization
+  const { error: accessError } = await this.supabase
+    .from('user_organization_access')
+    .insert({
+      user_id: userId,
+      organization_id: invitation.organization_id,  // ← Käytä haettua invitation objektia
+      role: invitation.role,
+      status: 'active'
+    })
+  
+  if (accessError) throw new Error(accessError.message)
+  
+  return invitation
+}
 
   async deleteInvitation(invitationId) {
     const { error } = await this.supabase

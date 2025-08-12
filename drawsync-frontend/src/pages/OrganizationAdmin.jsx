@@ -17,7 +17,7 @@ import { db } from '../services/database'
 import NavigationHeader from '../components/NavigationHeader'
 
 export default function OrganizationAdmin() {
-  const { organization, user, } = useOrganization()
+  const { organization, user } = useOrganization()
   const navigate = useNavigate()
   
   const [activeTab, setActiveTab] = useState('members')
@@ -27,11 +27,9 @@ export default function OrganizationAdmin() {
   const [showInviteModal, setShowInviteModal] = useState(false)
 
   useEffect(() => {
-    console.log('🚀 OrganizationAdmin: Force refreshing context...')
-    refresh() // ← Force refresh OrganizationContext
-  }, [refresh])
-
-
+    if (!organization || !user) return
+    loadData()
+  }, [organization, user])
 
   const loadData = async () => {
     try {
@@ -54,28 +52,22 @@ export default function OrganizationAdmin() {
     loadData() // Refresh data
   }
 
-if (!organization || organization.type === 'PLATFORM_ADMIN' || organization.userRole !== 'owner') {
-    console.log('❌ Access denied - reason:', {
-    noOrg: !organization,
-    isPlatformAdmin: organization?.type === 'PLATFORM_ADMIN', 
-    notOwner: organization?.userRole !== 'owner',
-    actualRole: organization?.userRole
-  })
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
-        <p className="text-gray-600 mb-8">Only organization owners can access team management.</p>
-        <button 
-          onClick={() => navigate('/app')}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-        >
-          Back to App
-        </button>
+  if (!organization || organization.type === 'PLATFORM_ADMIN' || organization.userRole !== 'owner') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
+          <p className="text-gray-600 mb-8">Only organization owners can access team management.</p>
+          <button 
+            onClick={() => navigate('/app')}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
+          >
+            Back to App
+          </button>
+        </div>
       </div>
-    </div>
-  )
-}
+    )
+  }
 
   if (loading) {
     return (
@@ -173,6 +165,189 @@ if (!organization || organization.type === 'PLATFORM_ADMIN' || organization.user
   )
 }
 
+// InviteModal Component
+const InviteModal = ({ organization, currentUser, onClose, onSuccess }) => {
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState('user')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [inviteLink, setInviteLink] = useState('')
+  const [showSuccess, setShowSuccess] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setIsLoading(true)
+
+    try {
+      // Validate email
+      if (!email || !email.includes('@')) {
+        throw new Error('Anna validi sähköpostiosoite')
+      }
+
+      // Create invitation
+      const invitation = await db.createInvitation(
+        organization.id,
+        email,
+        role,
+        currentUser.id
+      )
+
+      // Generate invite link
+      const baseUrl = window.location.origin
+      const inviteUrl = `${baseUrl}/join?token=${invitation.token}`
+      setInviteLink(inviteUrl)
+      setShowSuccess(true)
+
+      // Reset form
+      setEmail('')
+      setRole('user')
+
+    } catch (error) {
+      console.error('Failed to create invitation:', error)
+      setError(error.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const copyInviteLink = () => {
+    navigator.clipboard.writeText(inviteLink)
+    alert('Invite link copied to clipboard!')
+  }
+
+  const closeModal = () => {
+    setShowSuccess(false)
+    setInviteLink('')
+    onClose()
+    if (showSuccess) {
+      onSuccess() // Refresh data
+    }
+  }
+
+  if (showSuccess) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+          <div className="text-center">
+            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+              <Check className="h-6 w-6 text-green-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Invitation Sent!
+            </h3>
+            <p className="text-gray-600 mb-4">
+              Invitation created for <strong>{email}</strong>
+            </p>
+            
+            <div className="bg-gray-50 p-3 rounded-lg mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Invite Link:
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={inviteLink}
+                  readOnly
+                  className="flex-1 text-sm bg-white border border-gray-300 rounded px-3 py-2"
+                />
+                <button
+                  onClick={copyInviteLink}
+                  className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy
+                </button>
+              </div>
+            </div>
+            
+            <p className="text-xs text-gray-500 mb-6">
+              Share this link with the new team member. Link expires in 7 days.
+            </p>
+          </div>
+          
+          <div className="flex justify-center">
+            <button
+              onClick={closeModal}
+              className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          Invite Team Member
+        </h3>
+        
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Email Address
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="colleague@company.com"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+              disabled={isLoading}
+            />
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Role
+            </label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={isLoading}
+            >
+              <option value="user">User - Can create and view projects</option>
+              <option value="admin">Admin - Can manage team members</option>
+            </select>
+          </div>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              disabled={isLoading}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading || !email}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />}
+              {isLoading ? 'Creating...' : 'Send Invitation'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Other tab components (unchanged)
 const MembersTab = ({ members, onRefresh }) => {
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   
@@ -255,16 +430,16 @@ const MembersTab = ({ members, onRefresh }) => {
                         <div className="flex-shrink-0 h-10 w-10">
                           <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center">
                             <span className="text-white font-medium text-sm">
-                              {member.user?.email?.charAt(0).toUpperCase() || '?'}
+                              {member.user?.email?.charAt(0).toUpperCase() || member.user_id?.charAt(0).toUpperCase() || '?'}
                             </span>
                           </div>
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">
-                            {member.user?.email || 'Unknown'}
+                            {member.user?.email || `User ${member.user_id?.slice(0, 8)}`}
                           </div>
                           <div className="text-sm text-gray-500">
-                            ID: {member.user?.id?.slice(0, 8) || 'N/A'}...
+                            ID: {member.user_id?.slice(0, 8)}...
                           </div>
                         </div>
                       </div>
@@ -312,7 +487,7 @@ const MembersTab = ({ members, onRefresh }) => {
               Remove Team Member?
             </h3>
             <p className="text-gray-600 mb-6">
-              Are you sure you want to remove <strong>{deleteConfirm.user?.email}</strong> from the team? 
+              Are you sure you want to remove <strong>{deleteConfirm.user?.email || deleteConfirm.user_id}</strong> from the team? 
               They will lose access to all organization projects.
             </p>
             <div className="flex justify-end gap-3">
@@ -323,7 +498,7 @@ const MembersTab = ({ members, onRefresh }) => {
                 Cancel
               </button>
               <button
-                onClick={() => handleRemoveMember(deleteConfirm.user_id, deleteConfirm.user?.email)}
+                onClick={() => handleRemoveMember(deleteConfirm.user_id, deleteConfirm.user?.email || deleteConfirm.user_id)}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
               >
                 Remove Member
@@ -336,30 +511,200 @@ const MembersTab = ({ members, onRefresh }) => {
   )
 }
 
-const InvitationsTab = ({ invitations, onRefresh }) => (
-  <div className="bg-white rounded-lg shadow p-6">
-    <h3 className="text-lg font-semibold mb-4">Pending Invitations ({invitations.length})</h3>
-    <p className="text-gray-600">Invitations list coming soon...</p>
-  </div>
-)
+// OrganizationAdmin.jsx - korvaa InvitationsTab:
+const InvitationsTab = ({ invitations, onRefresh }) => {
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
+
+  const handleDeleteInvitation = async (invitationId) => {
+    try {
+      await db.deleteInvitation(invitationId)
+      onRefresh()
+      setDeleteConfirm(null)
+      alert('Invitation deleted')
+    } catch (error) {
+      console.error('Failed to delete invitation:', error)
+      alert('Failed to delete invitation: ' + error.message)
+    }
+  }
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('fi-FI', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const getStatusColor = (status) => {
+    const colors = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      accepted: 'bg-green-100 text-green-800', 
+      expired: 'bg-red-100 text-red-800'
+    }
+    return colors[status] || colors.pending
+  }
+
+  const copyInviteLink = (token) => {
+    const baseUrl = window.location.origin
+    const inviteUrl = `${baseUrl}/join?token=${token}`
+    navigator.clipboard.writeText(inviteUrl)
+    alert('Invite link copied to clipboard!')
+  }
+
+  if (invitations.length === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow">
+        <div className="p-8 text-center">
+          <Mail className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No pending invitations</h3>
+          <p className="text-gray-500">Invite new team members to get started.</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Pending Invitations ({invitations.filter(i => i.status === 'pending').length})
+          </h3>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Email
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Role
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Invited
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Expires
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {invitations.map((invitation) => {
+                const isExpired = new Date(invitation.expires_at) < new Date()
+                const actualStatus = isExpired ? 'expired' : invitation.status
+                
+                return (
+                  <tr key={invitation.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-8 w-8">
+                          <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center">
+                            <span className="text-gray-600 font-medium text-xs">
+                              {invitation.email_address.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {invitation.email_address}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                        {invitation.role.charAt(0).toUpperCase() + invitation.role.slice(1)}
+                      </span>
+                    </td>
+                    
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(actualStatus)}`}>
+                        {actualStatus.charAt(0).toUpperCase() + actualStatus.slice(1)}
+                      </span>
+                    </td>
+                    
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(invitation.created_at)}
+                    </td>
+                    
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(invitation.expires_at)}
+                    </td>
+                    
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex items-center gap-2">
+                        {invitation.status === 'pending' && !isExpired && (
+                          <button
+                            onClick={() => copyInviteLink(invitation.token)}
+                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                          >
+                            <Copy className="h-4 w-4" />
+                            Copy Link
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setDeleteConfirm(invitation)}
+                          className="text-red-600 hover:text-red-800 flex items-center gap-1"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Delete confirmation modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Delete Invitation?
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete the invitation for <strong>{deleteConfirm.email_address}</strong>? 
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteInvitation(deleteConfirm.id)}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                Delete Invitation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
 
 const SettingsTab = ({ organization }) => (
   <div className="bg-white rounded-lg shadow p-6">
     <h3 className="text-lg font-semibold mb-4">Organization Settings</h3>
     <p className="text-gray-600">Settings coming soon...</p>
-  </div>
-)
-
-const InviteModal = ({ organization, currentUser, onClose, onSuccess }) => (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Invite Team Member</h3>
-      <p className="text-gray-600">Invite modal coming soon...</p>
-      <div className="flex justify-end gap-3 mt-6">
-        <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-          Cancel
-        </button>
-      </div>
-    </div>
   </div>
 )

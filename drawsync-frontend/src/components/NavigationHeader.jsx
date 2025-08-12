@@ -84,7 +84,7 @@ export default function NavigationHeader() {
               }`}
             >
               <FolderOpen className="h-4 w-4" />
-              <span className="hidden sm:inline">Projektit</span>
+              <span className="hidden sm:inline">Omat Tarjoukset</span>
             </button>
             
             <div className="w-px h-8 bg-gray-500 mx-2" />

@@ -11,6 +11,7 @@ import Login from '../pages/Login'
 import AdminDashboard from '../pages/adminpage/AdminDashboard'
 import PrivateRoute from './PrivateRoute'
 import OrganizationAdmin from '../pages/OrganizationAdmin'
+import Join from '../pages/Join'
 
 // Landing page component (for main domain)
 const LandingPage = () => (
@@ -49,30 +50,31 @@ export default function AppRouter() {
     const subdomain = getSubdomain(hostname)
     const currentPath = window.location.pathname
     
-    console.log('🚀 AppRouter: Determining routing mode...', { hostname, subdomain, organization, loading, currentPath })
-
     if (loading) return
 
+    // ✅ Determine new routing mode
+    let newRoutingMode = null
+    
     if (subdomain === 'admin') {
-      console.log('👑 Routing mode: ADMIN')
-      setRoutingMode('ADMIN')
+      newRoutingMode = 'ADMIN'
     } else if (subdomain && currentPath === '/login') {
-      console.log('🔐 Routing mode: ORGANIZATION_LOGIN (login page in subdomain)')
-      setRoutingMode('ORGANIZATION_LOGIN')
+      newRoutingMode = 'ORGANIZATION_LOGIN'
     } else if (subdomain && organization && organization.type !== 'PLATFORM_ADMIN') {
-      console.log('🏢 Routing mode: ORGANIZATION (org found)')
-      setRoutingMode('ORGANIZATION')
+      newRoutingMode = 'ORGANIZATION'
     } else if (subdomain && !organization) {
-      console.log('❌ Routing mode: ORGANIZATION but no org found')
-      setRoutingMode('ORGANIZATION')
+      newRoutingMode = 'ORGANIZATION'
     } else if (!subdomain) {
-      console.log('🌐 Routing mode: MAIN_SITE')
-      setRoutingMode('MAIN_SITE')
+      newRoutingMode = 'MAIN_SITE'
     } else {
-      console.log('❓ Routing mode: NOT_FOUND')
-      setRoutingMode('NOT_FOUND')
+      newRoutingMode = 'NOT_FOUND'
     }
-  }, [organization, loading])
+
+    // ✅ Only update state if it actually changed
+    if (newRoutingMode !== routingMode) {
+      console.log('🔄 Routing mode change:', routingMode, '→', newRoutingMode)
+      setRoutingMode(newRoutingMode)
+    }
+  }, [organization, loading, routingMode]) 
 
   if (loading || !routingMode) {
     return (
@@ -84,24 +86,50 @@ export default function AppRouter() {
       </div>
     )
   }
-
+  if (routingMode === 'MAIN_SITE') {
+  console.log('🌐 Routing to: Main Site')
+    return (
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/join" element={<Join />} />  
+      <Route path="/app" element={
+        <PrivateRoute>
+          <UploadAndJsonView />
+        </PrivateRoute>
+      } />
+      {/* ... rest of routes */}
+    </Routes>
+  )
+}
   // Admin Dashboard (admin.pic2data.local)
   if (routingMode === 'ADMIN') {
-    console.log('👑 Routing to: Admin Dashboard')
+        console.log('👑 Routing mode: ADMIN detected')
+    setRoutingMode('ADMIN')
+
     return (
       <Routes>
         <Route path="*" element={
           <PrivateRoute>
             <AdminDashboard />
           </PrivateRoute>
-        } />
-      </Routes>
-    )
-  }
-
+        } />  
+      <Route path="/admin" element={
+        <PrivateRoute>
+          <AdminDashboard />
+        </PrivateRoute>
+      } />
+      <Route path="*" element={
+        <PrivateRoute>
+          <AdminDashboard />
+        </PrivateRoute>
+      } />
+    </Routes>
+  )
+}
   // Organization Login (mantox.pic2data.local/login)
   if (routingMode === 'ORGANIZATION_LOGIN') {
-    console.log('🔐 Routing to: Organization Login')
+
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -114,11 +142,11 @@ export default function AppRouter() {
   if (routingMode === 'ORGANIZATION') {
     // If no organization found, redirect to login
     if (!organization) {
-      console.log('❌ No organization found for subdomain, redirecting to login')
+
       return <Navigate to="/login" replace />
     }
     
-    console.log('🏢 Routing to: Organization App for', organization.name)
+
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Organization Header */}
@@ -173,32 +201,6 @@ export default function AppRouter() {
     )
   }
 
-  // Main Site (pic2data.local)
-  if (routingMode === 'MAIN_SITE') {
-    console.log('🌐 Routing to: Main Site')
-    return (
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/app" element={
-          <PrivateRoute>
-            <UploadAndJsonView />
-          </PrivateRoute>
-        } />
-        <Route path="/projektit" element={
-          <PrivateRoute>
-            <Projects />
-          </PrivateRoute>
-        } />
-        <Route path="/admin" element={
-          <PrivateRoute>
-            <AdminDashboard />
-          </PrivateRoute>
-        } />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    )
-  }
 
   // 404 - Organization not found
   return (

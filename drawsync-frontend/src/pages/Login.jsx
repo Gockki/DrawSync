@@ -25,10 +25,10 @@ const handleSubmit = async (e) => {
       return
     }
 
-    console.log('🔐 Login successful, navigating in 500ms...')
+
     
     setTimeout(() => {
-      console.log('🚀 Attempting navigation to /app')
+
       window.location.href = '/app'
 }, 500)
       

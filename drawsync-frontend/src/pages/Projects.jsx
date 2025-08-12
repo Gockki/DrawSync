@@ -85,12 +85,12 @@ const handleDelete = async (id) => {
     .delete()
     .eq("id", id)
 
-  console.log('❌ Delete error:', error)
+
   
   if (!error) {
-    console.log('✅ Delete successful, fetching projects...')
+    
     await fetchProjects()  // ← Lisää await!
-    console.log('📊 Projects fetched')
+    
     setDeleteConfirm(null)
   } else {
     console.error('Delete failed:', error)
@@ -150,9 +150,9 @@ const handleDelete = async (id) => {
         <div className="container mx-auto px-6 py-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Omat projektit</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Omat analyysit</h1>
               <p className="text-sm text-gray-600">
-                {filteredProjects.length} {filteredProjects.length === 1 ? 'projekti' : 'projektia'} yhteensä
+                {filteredProjects.length} {filteredProjects.length === 1 ? 'analyysi' : 'analyysia'} yhteensä
               </p>
             </div>
 
@@ -163,7 +163,7 @@ const handleDelete = async (id) => {
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 transition-colors shadow-sm"
               >
                 <Plus className="h-4 w-4" />
-                Uusi projekti
+                Uusi tarjous
               </button>
 
               {/* Haku */}
@@ -238,7 +238,7 @@ const handleDelete = async (id) => {
                 onClick={() => navigate('/app')}
                 className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-sm"
               >
-                Luo ensimmäinen projekti
+                Luo ensimmäinen tarjous
               </button>
             )}
           </div>
@@ -262,14 +262,14 @@ const handleDelete = async (id) => {
                     <button 
                       onClick={() => openProject(proj.id)}
                       className="p-3 bg-white rounded-full hover:bg-blue-50 transition-colors"
-                      title="Avaa projekti"
+                      title="Avaa analyysi"
                     >
                       <Eye className="h-5 w-5 text-blue-600" />
                     </button>
                     <button 
                       onClick={() => setDeleteConfirm(proj.id)}
                       className="p-3 bg-white rounded-full hover:bg-red-50 transition-colors"
-                      title="Poista projekti"
+                      title="Poista analyysi"
                     >
                       <Trash2 className="h-5 w-5 text-red-600" />
                     </button>
@@ -364,14 +364,14 @@ const handleDelete = async (id) => {
                           <button 
                             onClick={() => openProject(proj.id)}
                             className="text-blue-600 hover:text-blue-800 p-1"
-                            title="Avaa projekti"
+                            title="Avaa analyysi"
                           >
                             <Eye className="h-4 w-4" />
                           </button>
                           <button 
                             onClick={() => setDeleteConfirm(proj.id)}
                             className="text-red-600 hover:text-red-800 p-1"
-                            title="Poista projekti"
+                            title="Poista analyysi"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
