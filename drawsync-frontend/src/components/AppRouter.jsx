@@ -105,7 +105,7 @@ export default function AppRouter() {
   // Admin Dashboard (admin.pic2data.local)
   if (routingMode === 'ADMIN') {
         console.log('👑 Routing mode: ADMIN detected')
-    setRoutingMode('ADMIN')
+
 
     return (
       <Routes>
@@ -119,11 +119,8 @@ export default function AppRouter() {
           <AdminDashboard />
         </PrivateRoute>
       } />
-      <Route path="*" element={
-        <PrivateRoute>
-          <AdminDashboard />
-        </PrivateRoute>
-      } />
+
+
     </Routes>
   )
 }
