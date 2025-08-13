@@ -1,0 +1,117 @@
+{
+  "coating": {
+    "id": "coating",
+    "name": "Pinnoitusanalyysi",
+    "description": "Pinnoitteiden hinnoittelu ja pinta-ala-analyysi",
+    "icon": "🎨",
+    "color": "green",
+    "prompt": "Saat teknisen piirustuksen kuvan. Analysoi kuva tarkasti ja tunnista:\n\n1. PERUSTIEDOT: Tuotekoodit, nimet, materiaalit, painot, asiakastiedot\n2. MITAT: Pituus, leveys, korkeus millimetreinä (tarkkuus tärkeää)\n3. REIÄT: Halkaisijat ja määrät (laske huolellisesti)\n4. PINTA-ALA: Laske tarkka pinta-ala mitoista (brutto - reiät = netto)\n\nKäytä parannettuja OCR-kykyjäsi tunnistamaan pienetkin tekstit ja mitat.\n\nPalauta VAIN validi JSON seuraavassa muodossa:\n\n{\n  \"perustiedot\": {\n    \"tuotekoodi\": \"tunnistettu koodi tai null\",\n    \"tuotenimi\": \"tunnistettu nimi tai null\",\n    \"materiaali\": \"materiaali (Al, Steel, Stainless, Plastic, jne.) tai null\",\n    \"paino_kg\": 0.0,\n    \"loppuasiakas\": \"asiakasnimi jos näkyy tai null\",\n    \"pinnoite\": \"pinnoitetyyppi jos mainittu tai null\",\n    \"pintakarheus_ra\": \"karheus-arvo jos mainittu tai null\",\n    \"eräkoko\": \"sarjakoko jos mainittu tai null\"\n  },\n  \"mitat\": {\n    \"ulkomitat_mm\": {\n      \"pituus\": 0,\n      \"leveys\": 0,\n      \"korkeus\": 0\n    },\n    \"reiät\": [\n      {\"halkaisija_mm\": 0, \"määrä\": 0}\n    ]\n  },\n  \"pinta_ala_analyysi\": {\n    \"pinta_ala_cm2\": 0.0,\n    \"laskelma\": \"Laskettu mitoista: pituus x leveys\",\n    \"varmuus\": \"korkea/keskitaso/matala\"\n  },\n  \"huomiot\": [\"Tärkeät huomiot taulukossa tai piirustuksessa. Muista ilmoittaa täälläkin mitat euroopassa käytettyjä mittoja\"],\n  \"processing_info\": {\n    \"model_used\": \"gpt-5\",\n    \"confidence\": 0.9,\n    \"processing_time\": 0\n  }\n}\n\nTÄRKEÄÄ:\n- Jos jokin tieto ei ole selvästi näkyvissä, käytä null-arvoa\n- Laske pinta-ala mitoista jos mahdollista (mm² → cm²)\n- Tunnista toleranssit ja lisää huomioihin\n- Käytä GPT-5:n parannettuja multimodaali-kykyjä tekstin tunnistukseen",
+    "ui_config": {
+      "tabs": [
+        {"id": "perustiedot", "name": "Perustiedot", "icon": "FileText", "required": true},
+        {"id": "mitat", "name": "Mitat", "icon": "Ruler", "required": true},
+        {"id": "pinta-ala", "name": "Pinta-ala", "icon": "TrendingUp", "required": true},
+        {"id": "palvelu", "name": "Palvelu", "icon": "Palette", "required": false},
+        {"id": "hinnoittelu", "name": "Hinnoittelu", "icon": "Calculator", "required": false}
+      ],
+      "features": {
+        "pricing": true,
+        "surface_area": true,
+        "treatments": true,
+        "quote_generation": true,
+        "material_calculation": false,
+        "tolerance_analysis": false,
+        "time_estimation": false
+      }
+    },
+    "validation": {
+      "required_fields": [
+        "perustiedot.tuotekoodi",
+        "pinta_ala_analyysi.pinta_ala_cm2",
+        "mitat.ulkomitat_mm"
+      ],
+      "optional_fields": [
+        "perustiedot.materiaali",
+        "perustiedot.paino_kg"
+      ]
+    }
+  },
+
+  "steel": {
+    "id": "steel",
+    "name": "Teräsrakenne-analyysi",
+    "description": "Teräsrakenteiden materiaalilaskelmat ja ostolista",
+    "icon": "🏗️",
+    "color": "blue",
+    "prompt": "Käytä sinun Thinking tasoa.Tee kuva-analyysi ja käytä sinun OCR-taitoja sekä uusia multimodulaaritaitoja yhdistettynä havaitsemaan kuvasta materiaalit listattuna ja eri materiaalimäärät. Koita laskentaan OCR-tulosta ja omaa kuvan analyysia hyväksi.\n\nTee vielä tarkempi analyysi - laske tarkasti kuinka monta kertaa löydät materiaalimainintoja kuvasta.\n\nPALAUTA TARKKA JSON-MUOTO:\n\n{\n  \"perustiedot\": {\n    \"projekti_numero\": \"tunnistettu numero tai null\",\n    \"rakenteen_nimi\": \"rakenteen nimi jos näkyy tai null\",\n    \"materiaaliluokka\": \"S355/S275/S235 tai null\",\n    \"mittakaava\": \"esim. 1:50 tai null\",\n    \"piirtäjä\": \"piirtäjän nimi jos näkyy tai null\",\n    \"päivämäärä\": \"piirustuksen päivämäärä jos näkyy tai null\"\n  },\n  \"materiaalilista\": [\n    {\n      \"profiili\": \"IPE300\",\n      \"kuvaus\": \"Pääpalkki/sivupalkki/pilari\",\n      \"pituus_mm\": 8740,\n      \"kappaleet\": 1,\n      \"kg_per_m\": 42.2,\n      \"kokonaispituus_m\": 8.74,\n      \"kokonaispaino_kg\": 368.8,\n      \"materiaali\": \"S355J2\",\n      \"sijainti\": \"katoksen runko\",\n      \"luottamus\": 0.95\n    },\n    {\n      \"profiili\": \"UPE100\",\n      \"kuvaus\": \"Sivupalkki\",\n      \"pituus_mm\": 3000,\n      \"kappaleet\": 6,\n      \"kg_per_m\": 8.64,\n      \"kokonaispituus_m\": 18.0,\n      \"kokonaispaino_kg\": 155.5,\n      \"materiaali\": \"S355J2\",\n      \"sijainti\": \"sivurakenne\",\n      \"luottamus\": 0.80\n    },\n    {\n      \"profiili\": \"SHS100×4\",\n      \"kuvaus\": \"Jäykiste\",\n      \"pituus_mm\": 2500,\n      \"kappaleet\": 4,\n      \"kg_per_m\": 11.9,\n      \"kokonaispituus_m\": 10.0,\n      \"kokonaispaino_kg\": 119.0,\n      \"materiaali\": \"S355J2H\",\n      \"sijainti\": \"vinojäykisteet\",\n      \"luottamus\": 0.85\n    }\n  ],\n  \"liitokset\": [\n    {\n      \"tyyppi\": \"hitsausliitos\",\n      \"kuvaus\": \"Palkki-pilari liitos\",\n      \"määrä\": 8,\n      \"hitsipituus_mm\": 150,\n      \"liitettävät_profiilit\": [\"IPE300\", \"UPE100\"]\n    },\n    {\n      \"tyyppi\": \"pulttiliitos\",\n      \"kuvaus\": \"Ankkurointi\",\n      \"määrä\": 4,\n      \"pulttikoko\": \"M16\",\n      \"liitettävät_profiilit\": [\"IPE300\"]\n    }\n  ],\n  \"yhteenveto\": {\n    \"kokonaispituus_m\": 36.74,\n    \"kokonaispaino_kg\": 643.3,\n    \"profiilityyppien_lkm\": 3,\n    \"eri_profiileja\": 3,\n    \"hitsisaumojen_pituus_m\": 1.2,\n    \"keskimääräinen_luottamus\": 0.87\n  },\n  \"huomiot\": [\n    \"IPE300 L=8740 selkeästi näkyvissä OCR:llä\",\n    \"UPE100 tunnistettu useassa kohdassa, määrä arvioitu vision perusteella\",\n    \"SHS100×4 toistuu vinojäykisteissä\"\n  ],\n  \"processing_info\": {\n    \"model_used\": \"gpt-5\",\n    \"confidence\": 0.9,\n    \"processing_time\": 0,\n    \"ocr_quality\": \"korkea\",\n    \"tunnistetut_profiilit\": 3\n  }\n}\n\nTärkeää:\n- Etsi KAIKKI näkyvät teräsprofiilit (IPE, HEA, HEB, UPE, SHS, RHS, L-profiilit, LATTA)\n- Laske kappalemäärät sekä OCR:n että vision perusteella\n- Jos et ole varma jostakin arvosta, laita luottamus alhaisemmaksi mutta älä jätä pois\n- Jos kg/m ei ole varma, käytä standardiarvoja teräsprofiileille\n- Laske tarkasti kuinka monta kertaa kukin materiaalimaininta esiintyy kuvassa",
+    "ui_config": {
+      "tabs": [
+        {"id": "perustiedot", "name": "Perustiedot", "icon": "FileText", "required": true},
+        {"id": "materiaalilista", "name": "Materiaalilista", "icon": "Package", "required": true},
+        {"id": "ostolista", "name": "Ostolista", "icon": "Calculator", "required": false},
+        {"id": "analyysi", "name": "Rakenne-analyysi", "icon": "TrendingUp", "required": false}
+      ],
+      "features": {
+        "pricing": false,
+        "surface_area": false,
+        "treatments": false,
+        "quote_generation": false,
+        "material_calculation": true,
+        "structural_analysis": true,
+        "weight_calculation": true,
+        "purchase_list": true
+      }
+    },
+    "validation": {
+      "required_fields": [
+        "perustiedot.projekti_numero",
+        "materiaalilista",
+        "yhteenveto.kokonaispaino_kg"
+      ],
+      "optional_fields": [
+        "liitokset",
+        "perustiedot.materiaaliluokka"
+      ]
+    }
+  },
+
+  "machining": {
+    "id": "machining",
+    "name": "Koneistusanalyysi",
+    "description": "Koneistusoperaatioiden ja toleranssien analyysi",
+    "icon": "⚙️",
+    "color": "purple",
+    "prompt": "Analysoi tämä koneistuspiirustus tarkkaan ja tunnista kaikki tekniset yksityiskohdat:\n\nVAIHE 1 - PERUSTIEDOT:\nTunnista piirustuksesta:\n- Osan numero, nimi, materiaali\n- Ulkomitat ja geometria\n- Sarjakoko ja versiotiedot\n\nVAIHE 2 - TOLERANSSI ANALYYSI:\nTunnista KAIKKI toleranssit ja GD&T merkinnät:\n- Mittatolеranssit (±0.1, h7, H11 jne.)\n- Geometriset toleranssit (suoruus, pyöreys, rinnakkaisuus)\n- Pintakarheudet (Ra, Rz arvot)\n- Kriittisyyden arviointi\n\nVAIHE 3 - KONEISTUSOPERAATIO ANALYYSI:\nAnalysoi tarvittavat koneistusoperaatiot:\n- Sorvi-, jyrsin-, porausoperaatiot\n- Operaatioiden järjestys ja kompleksisuus\n- Työkalujen vaatimukset\n- Arvioi koneistusajat realistisesti\n\nLOPPUTULOS JSON-muodossa:\n{\n  \"perustiedot\": {\n    \"osa_numero\": \"\",\n    \"osa_nimi\": \"\",\n    \"materiaali\": \"\",\n    \"sarjakoko\": 0,\n    \"massa_kg\": 0.0,\n    \"mittakaava\": \"\",\n    \"versio\": \"\"\n  },\n  \"mitat\": {\n    \"ulkomitat_mm\": {\n      \"pituus\": 0,\n      \"leveys\": 0,\n      \"korkeus\": 0\n    },\n    \"kriittiset_mitat\": [\n      {\n        \"mitta\": \"Ø50\",\n        \"toleranssi\": \"h7\",\n        \"arvo_min\": 49.975,\n        \"arvo_max\": 50.000\n      }\n    ]\n  },\n  \"toleranssit\": [\n    {\n      \"mitta\": \"Ø50\",\n      \"toleranssi\": \"h7\",\n      \"tyyppi\": \"reikä\",\n      \"kriittisyys\": \"korkea\",\n      \"gdt_merkintä\": null\n    },\n    {\n      \"pinta\": \"yläpinta\",\n      \"karheus\": \"Ra 1.6\",\n      \"gdt\": \"⊥ 0.05 A\",\n      \"kriittisyys\": \"keskitaso\"\n    }\n  ],\n  \"koneistusoperaatiot\": [\n    {\n      \"operaatio\": \"sorvi\",\n      \"kuvaus\": \"Ulkohalkaisijan koneistus\",\n      \"järjestysnumero\": 1,\n      \"aika_min\": 15,\n      \"kompleksisuus\": \"keskinkertainen\",\n      \"työkalu\": \"karbiditerä CNMG\",\n      \"nopeus_rpm\": 800,\n      \"syöttö_mm_rev\": 0.2\n    },\n    {\n      \"operaatio\": \"jyrsin\",\n      \"kuvaus\": \"Tasopinnan viimeistely\",\n      \"järjestysnumero\": 2,\n      \"aika_min\": 8,\n      \"kompleksisuus\": \"matala\",\n      \"työkalu\": \"kovametallijyrsin Ø16\"\n    }\n  ],\n  \"yhteenveto\": {\n    \"valmistusaika_h\": 1.5,\n    \"kompleksisuus\": \"keskinkertainen\",\n    \"kriittisten_toleranssien_lkm\": 3,\n    \"operaatioiden_lkm\": 5,\n    \"suurin_haaste\": \"Reikätoleranssit h7\",\n    \"arvioitu_kustannus_eur\": 45.0\n  },\n  \"huomiot\": [\n    \"Toleranssi h7 vaatii hienokoneistusta\",\n    \"Pintakarheus Ra 1.6 kriittisillä pinnoilla\"\n  ],\n  \"processing_info\": {\n    \"model_used\": \"gpt-5\",\n    \"confidence\": 0.9,\n    \"processing_time\": 0\n  }\n}\n\nTÄRKEÄÄ:\n- Tunnista KAIKKI toleranssit, myös pienet merkinnät\n- Arvioi realistisia koneistusaikoja (ei liian optimistisia)\n- Ota huomioon materiaali koneistettavuudessa\n- Järjestä operaatiot loogiseen järjestykseen\n- Jos tieto ei ole selvästi näkyvissä, käytä null-arvoa",
+    "ui_config": {
+      "tabs": [
+        {"id": "perustiedot", "name": "Perustiedot", "icon": "FileText", "required": true},
+        {"id": "toleranssit", "name": "Toleranssit", "icon": "Ruler", "required": true},
+        {"id": "operaatiot", "name": "Operaatiot", "icon": "Cog", "required": true},
+        {"id": "aikataulu", "name": "Aikataulu", "icon": "Calculator", "required": false}
+      ],
+      "features": {
+        "pricing": false,
+        "surface_area": false,
+        "treatments": false,
+        "quote_generation": false,
+        "material_calculation": false,
+        "tolerance_analysis": true,
+        "operation_analysis": true,
+        "time_estimation": true,
+        "complexity_analysis": true
+      }
+    },
+    "validation": {
+      "required_fields": [
+        "perustiedot.osa_numero",
+        "toleranssit",
+        "koneistusoperaatiot",
+        "yhteenveto.valmistusaika_h"
+      ],
+      "optional_fields": [
+        "perustiedot.materiaali",
+        "mitat.kriittiset_mitat"
+      ]
+    }
+  }
+}
