@@ -11,6 +11,7 @@ import {
   ADDITIONAL_COSTS,
   getDeliveryTime 
 } from '../utils/coatingOptions'
+import { getIndustryConfig } from '../utils/aiPrompts'  // ← New import
 import NavigationHeader from './NavigationHeader'
 import ProjectsShortcut from './ProjectsShortcut'
 import UploadSection from './UploadSection'
@@ -60,6 +61,9 @@ export default function UploadAndJsonView() {
   const [pretreatments, setPretreatments] = useState([])
   const [pricing, setPricing] = useState(null)
   const { organization, user } = useOrganization()
+
+  // ✅ Get industry configuration
+  const industryConfig = organization ? getIndustryConfig(organization.industry_type) : getIndustryConfig('coating')
 
   // AUTH + load project
   useEffect(() => {
@@ -163,10 +167,12 @@ const loadProject = async (projectId) => {
   }
 
   const handleUpload = async () => {
-    if (!file) return
+    if (!file || !organization) return
     const form = new FormData()
     form.append('file', file)
-
+    
+    // ✅ Send industry_type to backend for prompt selection
+    form.append('industry_type', organization.industry_type || 'coating')
 
     setLoading(true)
     setFakeDone(false)
@@ -315,39 +321,54 @@ const handleSaveProject = async () => {
   }
 }
 
-  // Tab definitions
-  const tabs = [
-    { 
-      id: 'perustiedot', 
-      name: 'Perustiedot', 
-      icon: Package,
-      enabled: !!data 
-    },
-    { 
-      id: 'mitat', 
-      name: 'Mitat', 
-      icon: Ruler,
-      enabled: !!data?.mitat 
-    },
-    { 
-      id: 'pinta-ala', 
-      name: 'Pinta-ala', 
-      icon: TrendingUp,
-      enabled: !!data?.pinta_ala_analyysi 
-    },
-    { 
-      id: 'palvelu', 
-      name: 'Palvelu', 
-      icon: Palette,
-      enabled: !!data 
-    },
-    { 
-      id: 'hinnoittelu', 
-      name: 'Hinnoittelu', 
-      icon: Calculator,
-      enabled: !!pricing 
-    },
-  ]
+  // ✅ Dynamic tab definitions based on industry
+  const tabs = industryConfig.tabs.map(tab => ({
+    ...tab,
+    icon: getTabIcon(tab.id),
+    enabled: getTabEnabled(tab.id)
+  }))
+
+  // Helper function to get tab icons
+  const getTabIcon = (tabId) => {
+    const icons = {
+      perustiedot: Package,
+      mitat: Ruler,
+      'pinta-ala': TrendingUp,
+      palvelu: Palette,
+      hinnoittelu: Calculator,
+      materiaalilista: FileText,
+      ostolista: Eye,
+      toleranssit: Ruler,
+      operaatiot: Package
+    }
+    return icons[tabId] || Package
+  }
+
+  // Helper function to check if tab is enabled
+  const getTabEnabled = (tabId) => {
+    switch (tabId) {
+      case 'perustiedot':
+        return !!data
+      case 'mitat':
+        return !!data?.mitat
+      case 'pinta-ala':
+        return !!data?.pinta_ala_analyysi
+      case 'palvelu':
+        return !!data && organization?.industry_type === 'coating'
+      case 'hinnoittelu':
+        return !!pricing && organization?.industry_type === 'coating'
+      case 'materiaalilista':
+        return !!data?.materiaalilista && organization?.industry_type === 'steel'
+      case 'ostolista':
+        return !!data?.materiaalilista && organization?.industry_type === 'steel'
+      case 'toleranssit':
+        return !!data?.toleranssit && organization?.industry_type === 'machining'
+      case 'operaatiot':
+        return !!data?.koneistusoperaatiot && organization?.industry_type === 'machining'
+      default:
+        return false
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
@@ -477,7 +498,7 @@ const handleSaveProject = async () => {
                 Ei analyysituloksia
               </h3>
               <p className="text-xl text-gray-600 mb-8">
-                Lataa ja analysoi piirustus nähdäksesi tulokset
+                Lataa ja analysoi {industryConfig.name.toLowerCase()} piirustus nähdäksesi tulokset
               </p>
               <div className="flex flex-wrap gap-4 justify-center text-sm text-gray-500">
                 <div className="flex items-center gap-2">
@@ -486,11 +507,11 @@ const handleSaveProject = async () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Eye className="h-4 w-4" />
-                  <span>GPT-5</span>
+                  <span>GPT-5 {industryConfig.icon}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Calculator className="h-4 w-4" />
-                  <span>Automaattinen hinnoittelu</span>
+                  <span>{industryConfig.name}</span>
                 </div>
               </div>
             </div>

@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from lib.gpt_utils import extract_structured_data_with_vision
 from pdf_to_png import pdf_first_page_to_png_bytes  # uusi
 from routers.quotes import router as quotes_router
-
+from ai_prompts import get_prompt_for_industry, validate_industry_type, get_supported_industries
 
 
 app = FastAPI()

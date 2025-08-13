@@ -199,7 +199,7 @@ const CreateOrganizationModal = ({ isOpen, onClose, onSuccess }) => {
               value={formData.name}
               onChange={(e) => handleNameChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. Finecom Oy"
+              placeholder="e.g. Teräs Oy"
             />
           </div>
 
@@ -213,7 +213,7 @@ const CreateOrganizationModal = ({ isOpen, onClose, onSuccess }) => {
               value={formData.slug}
               onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. finecom"
+              placeholder="e.g. steeltech"
             />
             <p className="text-xs text-gray-500 mt-1">
               Will be accessible at: {formData.slug}.pic2data.local
@@ -222,18 +222,20 @@ const CreateOrganizationModal = ({ isOpen, onClose, onSuccess }) => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Industry
+              Industry / Teollisuus
             </label>
             <select
               value={formData.industry_type}
               onChange={(e) => setFormData(prev => ({ ...prev, industry_type: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="pinnoitus">Pinnoitus</option>
-              <option value="koneistus">Koneistus</option>
-              <option value="hitsaus">Hitsaus</option>
-              <option value="sähkötyöt">Sähkötyöt</option>
+              <option value="coating">Pinnoitusteollisuus</option>
+              <option value="steel">Teräsrakentaminen</option>
+              <option value="machining">Koneistusteollisuus</option>
             </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Määrittää AI-analyysin tyypin ja käyttöliittymän
+            </p>
           </div>
 
           <div>

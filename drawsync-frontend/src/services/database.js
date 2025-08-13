@@ -204,16 +204,17 @@ async acceptInvitation(token, userId) {
       .insert({
         name: orgData.name,
         slug: orgData.slug,
-        industry_type: orgData.industry_type || 'pinnoitus',
+        industry_type: orgData.industry_type,
         contact_email: orgData.contact_email,
-        subscription_plan: orgData.subscription_plan || 'trial',
+        subscription_plan: orgData.subscription_plan,
         ui_settings: orgData.ui_settings || {},
         pricing_config: orgData.pricing_config || {}
       })
       .select()
+      .single()
     
     if (error) throw new Error(error.message)
-    return data[0]
+    return data
   }
 
   async deleteOrganization(orgId) {
