@@ -77,26 +77,26 @@ export default function UploadAndJsonView() {
     }
   }, [navigate])
 
-const loadProject = async (projectId) => {
-  if (!organization || !user) return
-  
-  try {
-    // Hae kaikki käyttäjän projektit ja etsi oikea ID
-    const projects = await db.getDrawings(organization.id, user.id)
-    const project = projects.find(p => p.id === projectId)
+  const loadProject = async (projectId) => {
+    if (!organization || !user) return
     
-    if (project) {
-      setData(project.gpt_analysis)
-      setEditedData(project.gpt_analysis?.perustiedot || {})
-      setPreviewUrl(project.image_url)
-      setSavedDrawingId(project.id)
-      setSuccess(true)
-      setTimeout(() => setSuccess(false), 4000)
+    try {
+      // Hae kaikki käyttäjän projektit ja etsi oikea ID
+      const projects = await db.getDrawings(organization.id, user.id)
+      const project = projects.find(p => p.id === projectId)
+      
+      if (project) {
+        setData(project.gpt_analysis)
+        setEditedData(project.gpt_analysis?.perustiedot || {})
+        setPreviewUrl(project.image_url)
+        setSavedDrawingId(project.id)
+        setSuccess(true)
+        setTimeout(() => setSuccess(false), 4000)
+      }
+    } catch (error) {
+      console.error('Load project error:', error)
     }
-  } catch (error) {
-    console.error('Load project error:', error)
   }
-}
 
   // Pricing effect
   useEffect(() => {
@@ -151,8 +151,8 @@ const loadProject = async (projectId) => {
       setSelectedVariant('')
     }
   }, [selectedCoating])
-  // Handlers
 
+  // Handlers
   const handleDrop = (e) => {
     e.preventDefault()
     const droppedFile = e.dataTransfer.files[0]
@@ -165,14 +165,21 @@ const loadProject = async (projectId) => {
     setFile(f)
     setPreviewUrl(url)
   }
-
+  const toCanonicalIndustry = (t) => {
+  if (!t) return 'coating';
+  const v = String(t).toLowerCase().trim();
+  if (v === 'pinnoitus') return 'coating';
+  if (v === 'teräs') return 'steel';
+  if (v === 'koneistus') return 'machining';
+  return v; // jos jo 'coating' | 'steel' | 'machining'
+};
   const handleUpload = async () => {
     if (!file || !organization) return
     const form = new FormData()
     form.append('file', file)
     
     // ✅ Send industry_type to backend for prompt selection
-    form.append('industry_type', organization.industry_type || 'coating')
+    form.append('industry_type', toCanonicalIndustry(organization?.industry_type))
 
     setLoading(true)
     setFakeDone(false)
@@ -276,60 +283,60 @@ const loadProject = async (projectId) => {
     }
   };
 
-const handleSaveProject = async () => {
-  if (!data || !file || !organization || !user) {
-    alert('Ei tallennettavaa dataa!')
-    return
-  }
-  
-  setSaving(true)
-  try {
-    const ext = file.name.split('.').pop()
-    const path = `${user.id}/${Date.now()}.${ext}`
-    
-    const { error: upErr } = await supabase.storage
-      .from('drawings')
-      .upload(path, file)
-    if (upErr) throw upErr
-    
-    const { data: urlData } = supabase.storage
-      .from('drawings')
-      .getPublicUrl(path)
-    
-    const drawingData = {
-      filename: file.name,
-      image_url: urlData.publicUrl,
-      product_code: editedData.tuotekoodi || data.perustiedot?.tuotekoodi || null,
-      product_name: editedData.tuotenimi || data.perustiedot?.tuotenimi || null,
-      material: editedData.materiaali || data.perustiedot?.materiaali || null,
-      weight_kg: parseFloat(editedData.paino_kg || data.perustiedot?.paino_kg) || null,
-      surface_area_cm2: data.pinta_ala_analyysi?.pinta_ala_cm2 || null,
-      ocr_data: data.processing_info || {},
-      gpt_analysis: data
+  const handleSaveProject = async () => {
+    if (!data || !file || !organization || !user) {
+      alert('Ei tallennettavaa dataa!')
+      return
     }
     
-    const saved = await db.saveDrawing(organization.id, user.id, drawingData)
-    
-    setSavedDrawingId(saved.id)
-    setSaveSuccess(true)
-    setTimeout(() => setSaveSuccess(false), 4000)
-  } catch (err) {
-    console.error(err)
-    alert(`Tallennus epäonnistui: ${err.message}`)
-  } finally {
-    setSaving(false)
+    setSaving(true)
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `${user.id}/${Date.now()}.${ext}`
+      
+      const { error: upErr } = await supabase.storage
+        .from('drawings')
+        .upload(path, file)
+      if (upErr) throw upErr
+      
+      const { data: urlData } = supabase.storage
+        .from('drawings')
+        .getPublicUrl(path)
+      
+      const drawingData = {
+        filename: file.name,
+        image_url: urlData.publicUrl,
+        product_code: editedData.tuotekoodi || data.perustiedot?.tuotekoodi || null,
+        product_name: editedData.tuotenimi || data.perustiedot?.tuotenimi || null,
+        material: editedData.materiaali || data.perustiedot?.materiaali || null,
+        weight_kg: parseFloat(editedData.paino_kg || data.perustiedot?.paino_kg) || null,
+        surface_area_cm2: data.pinta_ala_analyysi?.pinta_ala_cm2 || null,
+        ocr_data: data.processing_info || {},
+        gpt_analysis: data
+      }
+      
+      const saved = await db.saveDrawing(organization.id, user.id, drawingData)
+      
+      setSavedDrawingId(saved.id)
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 4000)
+    } catch (err) {
+      console.error(err)
+      alert(`Tallennus epäonnistui: ${err.message}`)
+    } finally {
+      setSaving(false)
+    }
   }
-}
 
   // ✅ Dynamic tab definitions based on industry
   const tabs = industryConfig.tabs.map(tab => ({
     ...tab,
     icon: getTabIcon(tab.id),
-    enabled: getTabEnabled(tab.id)
+    enabled: getTabEnabled ?? true 
   }))
 
-  // Helper function to get tab icons
-  const getTabIcon = (tabId) => {
+  // Helper function to get tab icons  — CHANGED to function declaration (hoisted)
+  function getTabIcon(tabId) {
     const icons = {
       perustiedot: Package,
       mitat: Ruler,
@@ -344,8 +351,8 @@ const handleSaveProject = async () => {
     return icons[tabId] || Package
   }
 
-  // Helper function to check if tab is enabled
-  const getTabEnabled = (tabId) => {
+  // Helper function to check if tab is enabled — CHANGED to function declaration (hoisted)
+  function getTabEnabled(tabId) {
     switch (tabId) {
       case 'perustiedot':
         return !!data
@@ -486,13 +493,13 @@ const handleSaveProject = async () => {
           ) : (
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-16 text-center">
               <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-full border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-sm">
-  <img
-    src={aiEmpty}
-    alt="AI-analyysi"
-    className="h-12 w-12 object-contain select-none"
-    draggable="false"
-  />
-</div>
+                <img
+                  src={aiEmpty}
+                  alt="AI-analyysi"
+                  className="h-12 w-12 object-contain select-none"
+                  draggable="false"
+                />
+              </div>
 
               <h3 className="text-3xl font-bold text-gray-900 mb-4">
                 Ei analyysituloksia

@@ -1,4 +1,4 @@
-# drawsync-backend/main.py - Täydellinen versio
+# drawsync-backend/main.py - Täydellinen versio (päivitetty OCR-fix)
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -226,7 +226,7 @@ async def process_image(
         # ✅ OPTIMOITU tiedostokäsittely - eri strategia Google OCR:lle vs GPT:lle
         ext = Path(file.filename).suffix.lower()
         
-        # ✅ Säilytä alkuperäinen PDF Google OCR:ää varten
+        # ✅ Säilytä alkuperäinen PDF/kuva Google OCR:ää varten
         original_file_bytes = file_bytes
         
         if ext == ".pdf":
@@ -279,24 +279,41 @@ async def process_image(
         # ✅ KRIITTINEN: Hae industry-spesifinen prompt
         prompt = industry_manager.get_prompt(industry_type)
         
-        # ✅ STEEL-ALAN ERIKOISUUS: Käytä Google OCR korkealla DPI:llä
+        # ✅ STEEL-ALAN ERIKOISUUS: Käytä Google OCR (normalisoitu kuva)
         if industry_type == "steel":
             try:
                 logger.info(f"🔍 Using Google Vision OCR with high-DPI conversion for steel analysis...")
+                # Tuodaan riippuvuudet tässä, jotta muut flowt eivät vaadi niitä
                 from lib.ocr_utils import extract_text_from_image_bytes
+                from lib.ocr_image_prep import normalize_for_vision
                 from lib.steel_ocr_integration import create_steel_prompt_with_ocr
                 
                 # ✅ Google Vision tarvitsee kuvan, ei PDF:ää
                 if ext == ".pdf":
-                    # Luo erittäin korkealaatuinen PNG Google OCR:ää varten
-                    logger.info(f"📄 Creating ultra-high quality PNG for Google OCR (600 DPI)...")
-                    ocr_image_bytes = pdf_first_page_to_png_bytes(original_file_bytes, dpi=600)
-                    logger.info(f"✅ OCR image created: {len(ocr_image_bytes)} bytes")
+                    # Luo korkean laadun PNG Google OCR:ää varten (400 DPI riittää teksteille)
+                    logger.info("📄 Creating high-quality PNG for Google OCR (400 DPI)...")
+                    ocr_image_bytes = pdf_first_page_to_png_bytes(original_file_bytes, dpi=400)
+                    logger.info(f"✅ OCR image created: {len(ocr_image_bytes)} bytes (pre-normalize)")
                 else:
                     # Käytä alkuperäistä kuvaa
                     ocr_image_bytes = original_file_bytes
-                
-                # 1. Aja Google Vision OCR korkealaatuiselle kuvalle
+
+                # ✅ Normalisoi aina Visionia varten (RGB, koko, enkoodaus)
+                try:
+                    sig = ocr_image_bytes[:8]
+                    logger.info(f"🔎 OCR bytes (pre-norm): {len(ocr_image_bytes)} B, header={sig}")
+                    from PIL import Image
+                    try:
+                        im = Image.open(io.BytesIO(ocr_image_bytes))
+                        im.verify()
+                    except Exception as ver_err:
+                        logger.warning(f"⚠️ PIL verify warning before normalize: {ver_err}")
+                    ocr_image_bytes = normalize_for_vision(ocr_image_bytes)
+                    logger.info(f"✅ OCR image normalized: {len(ocr_image_bytes)} bytes")
+                except Exception as prep_err:
+                    logger.warning(f"⚠️ OCR image normalization failed, proceeding with original: {prep_err}")
+
+                # 1. Aja Google Vision OCR normalisoidulle kuvalle
                 ocr_results = extract_text_from_image_bytes(ocr_image_bytes, return_detailed=True)
                 
                 if ocr_results.get("status") == "success":
@@ -305,7 +322,7 @@ async def process_image(
                     prompt = enhanced_prompt
                     
                     logger.info(f"✅ Google OCR completed successfully:")
-                    logger.info(f"   - Source: {'600 DPI PNG from PDF' if ext == '.pdf' else 'original image'}")
+                    logger.info(f"   - Source: {'400 DPI PNG from PDF' if ext == '.pdf' else 'original image (normalized)'}")
                     logger.info(f"   - Quality: {ocr_results.get('quality', 'unknown')}")
                     logger.info(f"   - Confidence: {ocr_results.get('confidence', 0):.3f}")
                     logger.info(f"   - Words found: {ocr_results.get('words_found', 0)}")
@@ -322,8 +339,8 @@ async def process_image(
 
         # ✅ KRIITTINEN: Käytä PNG:tä GPT-5:lle (GPT ei osaa PDF:iä)
         structured = extract_structured_data_with_vision(
-            image_bytes=image_bytes,  # ← PNG GPT:lle
-            prompt=prompt,  # ← Enhanced prompt jos steel + OCR onnistui
+            image_bytes=image_bytes,  # ← PNG/tms. GPT:lle
+            prompt=prompt,            # ← Enhanced prompt jos steel + OCR onnistui
             industry_type=industry_type
         )
         
@@ -334,7 +351,7 @@ async def process_image(
             "filename": file.filename,
             "industry_type": industry_type,
             "processing_time": processing_time,
-            "processing_method": processing_note,  # ✅ Kertoo käytettiinkö suoraa PDF:ää vai PNG-konversiota
+            "processing_method": processing_note,  # kertoo käytettiinkö suoraa kuvaa vai PDF→PNG
             "dpi_used": dpi if processing_note.startswith("pdf_to_png") else None
         })
         
