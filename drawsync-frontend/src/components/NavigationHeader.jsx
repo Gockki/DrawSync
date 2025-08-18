@@ -2,6 +2,8 @@
 
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { useOrganization } from '../contexts/OrganizationContext'
+import { getIndustryConfig } from '../utils/aiPrompts'
 import mantoxLogo from '../assets/mantox-logo.png'
 import { getSubdomain } from '../utils/subdomain'
 import { 
@@ -16,8 +18,44 @@ import {
 export default function NavigationHeader() {
   const navigate = useNavigate()
   const location = useLocation()
-  
-    const handleLogout = async () => {
+  const { organization } = useOrganization()
+
+  // ✅ Dynaaminen teollisuustyyppi
+  const industryConfig = organization ? 
+    getIndustryConfig(organization.industry_type) : 
+    getIndustryConfig('coating')
+
+  const getAnalysisTitle = () => {
+    if (!organization) return 'Pinnoitusanalyysi'
+    
+    switch (organization.industry_type) {
+      case 'steel':
+        return 'Teräsrakenne-analyysi'
+      case 'machining':
+        return 'Koneistusanalyysi'
+      case 'coating':
+      default:
+        return 'Pinnoitusanalyysi'
+    }
+  }
+
+  const getAnalysisDescription = () => {
+    if (!organization) return 'AI-pohjainen piirustusanalyysi'
+    
+    switch (organization.industry_type) {
+      case 'steel':
+        return 'Materiaalilaskelmat ja ostotarpeet'
+      case 'machining':
+        return 'Toleranssit ja koneistusoperaatiot'
+      case 'coating':
+      default:
+        return 'AI-pohjainen piirustusanalyysi'
+    }
+  }
+
+  // Ei emojeja - ammattimaisempi ilme
+    
+  const handleLogout = async () => {
     await supabase.auth.signOut()
     
     // Redirect organisaation mukaan
@@ -43,22 +81,29 @@ export default function NavigationHeader() {
       <div className="container mx-auto px-6 py-4">
         <div className="flex justify-between items-center">
           {/* Logo ja brändi */}
-<div className="flex items-center gap-4">
-  {/* varaa logolle kiinteä leveys */}
-  <div className="relative h-12 w-[160px] overflow-visible shrink-0">
-    <img
-      src={mantoxLogo}
-      alt="Mantox Solutions"
-      onClick={() => navigate('/app')}
-      className="absolute left-0 top-1/2 -translate-y-1/2 h-full w-auto object-contain cursor-pointer select-none [transform-origin:left] scale-[3.7]"
-    />
-  </div>
+          <div className="flex items-center gap-4">
+            {/* varaa logolle kiinteä leveys */}
+            <div className="relative h-12 w-[160px] overflow-visible shrink-0">
+              <img
+                src={mantoxLogo}
+                alt="Mantox Solutions"
+                onClick={() => navigate('/app')}
+                className="absolute left-0 top-1/2 -translate-y-1/2 h-full w-auto object-contain cursor-pointer select-none [transform-origin:left] scale-[3.7]"
+              />
+            </div>
 
-  <div className="border-l border-gray-400 pl-4">
-    <p className="text-gray-200 text-lg font-medium">Pinnoitusanalyysi</p>
-    <p className="text-gray-300 text-sm">AI-pohjainen piirustusanalyysi</p>
-  </div>
-</div>
+            <div className="border-l border-gray-400 pl-4">
+              <div className="flex items-center gap-2">
+                <p className="text-gray-200 text-lg font-medium">{getAnalysisTitle()}</p>
+                {organization && (
+                  <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
+                    {organization.name}
+                  </span>
+                )}
+              </div>
+              <p className="text-gray-300 text-sm">{getAnalysisDescription()}</p>
+            </div>
+          </div>
 
           
           {/* Navigaatiolinkit */}
@@ -84,7 +129,11 @@ export default function NavigationHeader() {
               }`}
             >
               <FolderOpen className="h-4 w-4" />
-              <span className="hidden sm:inline">Omat Tarjoukset</span>
+              <span className="hidden sm:inline">
+                {organization?.industry_type === 'steel' ? 'Omat Analyysit' : 
+                 organization?.industry_type === 'machining' ? 'Omat Analyysit' : 
+                 'Omat Tarjoukset'}
+              </span>
             </button>
             
             <div className="w-px h-8 bg-gray-500 mx-2" />

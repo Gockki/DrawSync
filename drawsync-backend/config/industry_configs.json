@@ -40,41 +40,50 @@
 
 
 
-"steel": {
-  "id": "steel",
-  "name": "Teräsrakenne-analyysi", 
-  "description": "Teräsrakenteiden materiaalilaskelmat",
-  "icon": "🏗️",
-  "color": "blue",
-  "prompt": "Analysoi tämä teräsrakennepiirustus YKSINKERTAISESTI. Keskity materiaalilistan tunnistamiseen:\n\nTEHTÄVÄ 1 - MATERIAALIEN TUNNISTUS:\nEtsi kaikki teräsprofiilit ja laske niiden mainintamäärät:\n- IPE-profiilit (IPE100, IPE200, IPE300, jne.)\n- HEA/HEB-profiilit (HEA120, HEB200, jne.)\n- UPE-profiilit (UPE80, UPE100, UPE140, jne.)\n- SHS neliöputket (SHS100×4, SHS120×5, jne.)\n- RHS suorakaitaiset putket\n- L-profiilit ja lattateräkset\n- Levyt ja muut profiilit\n\nTEHTÄVÄ 2 - LASKENTAA EI TARVITA:\nÄLÄ yritä laskea metrimääriä tai painoja automaattisesti.\nKerro vain:\n- Mikä profiili\n- Kuinka monta kertaa se mainitaan kuvassa\n- Jos pituus on selvästi näkyvissä (esim. L=8740), mainitse se\n\nPALAUTUSFORMAAT JSON:\n{\n  \"perustiedot\": {\n    \"projekti_numero\": \"löydetty numero tai null\",\n    \"rakenteen_nimi\": \"rakenteen nimi tai null\",\n    \"materiaaliluokka\": \"S355/S275 tai null\",\n    \"mittakaava\": \"1:50 tai null\",\n    \"piirtäjä\": \"nimi tai null\",\n    \"päivämäärä\": \"pvm tai null\"\n  },\n  \"materiaalilista\": [\n    {\n      \"profiili\": \"IPE300\",\n      \"maininnat_kuvassa\": 8,\n      \"selkeä_pituus_mm\": 8740,\n      \"epävarma_pituus_mm\": null,\n      \"sijainti_kuvassa\": \"yläosa, alaosa\",\n      \"huomiot\": \"Selkeästi näkyvä L=8740 merkintä\"\n    }\n  ],\n  \"yhteenveto\": {\n    \"profiilityyppien_lkm\": 0,\n    \"yhteensä_mainintoja\": 0\n  },\n  \"insinöörin_tarkistettavaa\": [\n    \"IPE300 pituuden varmistus mittakaavasta\"\n  ],\n  \"huomiot\": [\n    \"OCR löysi 8 IPE300 mainintaa - tarkista onko tämä 8 kappaletta vai viittauksia\"\n  ]\n}\n\nTÄRKEÄÄ:\n- Luota OCR-tuloksiin materiaalien mainintamääristä\n- ÄLÄ arvaa kappalemääriä - anna ne insinöörin tarkistettavaksi\n- ÄLÄ laske painoja automaattisesti\n- Jos et ole varma, merkitse epävarma tai insinöörin_tarkistettavaa\n- Keskity siihen mitä NÄET, älä siihen mitä LUULET että se tarkoittaa",
 
-  "ui_config": {
-    "tabs": [
-      {"id": "perustiedot", "name": "Perustiedot", "icon": "FileText", "required": true},
-      {"id": "materiaalilista", "name": "Materiaalilista", "icon": "Package", "required": true},
-      {"id": "tarkistettavaa", "name": "Tarkistettavaa", "icon": "AlertTriangle", "required": false}
-    ],
-    "features": {
-      "pricing": false,
-      "surface_area": false,
-      "treatments": false,
-      "quote_generation": false,
-      "material_detection": true,
-      "engineer_review": true,
-      "ocr_confidence": true,
-      "mention_counting": true
+
+  "steel": {
+    "id": "steel",
+    "name": "Teräsrakenne-analyysi",
+    "description": "Teräsrakenteiden materiaalilaskelmat ja ostolista",
+    "icon": "🏗️",
+    "color": "blue",
+    "prompt": "Analysoi tämä teräsrakennepiirustus YKSINKERTAISESTI. Saat Googlen OCR datan ja kuvan. Keskity materiaalilistan tunnistamiseen:\n\nTEHTÄVÄ 1 - MATERIAALIEN TUNNISTUS:\nEtsi kaikki teräsprofiilit ja laske niiden mainintamäärät:\n- IPE-profiilit (IPE100, IPE200, IPE300, jne.)\n- HEA/HEB-profiilit (HEA120, HEB200, jne.)\n- UPE-profiilit (UPE80, UPE100, UPE140, jne.)\n- SHS neliöputket (SHS100×4, SHS120×5, jne.)\n- RHS suorakaitaiset putket\n- L-profiilit ja lattateräkset\n- Levyt ja muut profiilit\n\nTEHTÄVÄ 2 - LASKENTAA EI TARVITA:\nÄLÄ yritä laskea metrimääriä tai painoja automaattisesti.\nKerro vain:\n- Mikä profiili\n- Kuinka monta kertaa se mainitaan kuvassa\n- Jos pituus on selvästi näkyvissä (esim. L=8740), mainitse se\n\nPALAUTUSFORMAAT JSON:\n{\n  \"perustiedot\": {\n    \"projekti_numero\": \"löydetty numero tai null\",\n    \"rakenteen_nimi\": \"rakenteen nimi tai null\",\n    \"materiaaliluokka\": \"S355/S275 tai null\",\n    \"mittakaava\": \"1:50 tai null\",\n    \"piirtäjä\": \"nimi tai null\",\n    \"päivämäärä\": \"pvm tai null\"\n  },\n  \"materiaalilista\": [\n    {\n      \"profiili\": \"IPE300\",\n      \"maininnat_kuvassa\": 8,\n      \"selkeä_pituus_mm\": 8740,\n      \"epävarma_pituus_mm\": null,\n      \"sijainti_kuvassa\": \"yläosa, alaosa\",\n      \"huomiot\": \"Selkeästi näkyvä L=8740 merkintä\"\n    }\n  ],\n  \"yhteenveto\": {\n    \"profiilityyppien_lkm\": 0,\n    \"yhteensä_mainintoja\": 0\n  },\n  \"insinöörin_tarkistettavaa\": [\n    \"IPE300 pituuden varmistus mittakaavasta\"\n  ],\n  \"huomiot\": [\n    \"OCR löysi 8 IPE300 mainintaa - tarkista onko tämä 8 kappaletta vai viittauksia\"\n  ]\n}\n\nTÄRKEÄÄ:\n- Luota OCR-tuloksiin materiaalien mainintamääristä\n- ÄLÄ arvaa kappalemääriä - anna ne insinöörin tarkistettavaksi\n- ÄLÄ laske painoja automaattisesti\n- Jos et ole varma, merkitse epävarma tai insinöörin_tarkistettavaa\n- Keskity siihen mitä NÄET, älä siihen mitä LUULET että se tarkoittaa",
+    "ui_config": {
+      "tabs": [
+        {"id": "perustiedot", "name": "Perustiedot", "icon": "FileText", "required": true},
+        {"id": "materiaalilista", "name": "Materiaalilista", "icon": "Package", "required": true},
+        {"id": "tarkistettavaa", "name": "Tarkistettavaa", "icon": "AlertTriangle", "required": false},
+        {"id": "ostolista", "name": "Ostolista", "icon": "Calculator", "required": false}
+      ],
+      "features": {
+        "pricing": false,
+        "surface_area": false,
+        "treatments": false,
+        "quote_generation": false,
+        "material_calculation": true,
+        "structural_analysis": true,
+        "weight_calculation": true,
+        "purchase_list": true,
+        "engineer_review": true,
+        "ocr_confidence": true,
+        "mention_counting": true
+      }
+    },
+    "validation": {
+      "required_fields": [
+        "perustiedot.projekti_numero",
+        "materiaalilista",
+        "yhteenveto.profiilityyppien_lkm"
+      ],
+      "optional_fields": [
+        "liitokset",
+        "perustiedot.materiaaliluokka",
+        "insinöörin_tarkistettavaa"
+      ]
     }
   },
-  "validation": {
-    "required_fields": [
-      "materiaalilista",
-      "yhteenveto.profiilityyppien_lkm"
-    ],
-    "optional_fields": [
-      "perustiedot.projekti_numero",
-      "insinöörin_tarkistettavaa"
-    ]
-  },
+
 
 
   "machining": {
@@ -114,6 +123,7 @@
         "perustiedot.materiaali",
         "mitat.kriittiset_mitat"
       ]
-    }
-  }
-}
+    }}}
+  
+  
+

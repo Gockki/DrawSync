@@ -30,6 +30,7 @@ import Hinnoittelupanel from './Hinnoittelupanel'
 import SteelPerustiedotPanel from './SteelPerustiedotPanel'
 import SteelMaterialListPanel from './SteelMaterialListPanel'
 import SteelSummaryPanel from './SteelSummaryPanel'
+import SimpleMaterialDetectionPanel from './SimpleMaterialDetectionPanel'
 
 // ✅ YHTEISET KOMPONENTIT
 import NotesPanel from './NotesPanel'
@@ -38,7 +39,7 @@ import ActionButtons from './ActionButtons'
 import StatusBadge from './StatusBadge'
 import FakeProgressOverlay from "./FakeProgressOverlay"
 
-import { Upload, FileText, Eye, Package, Calculator, Ruler, TrendingUp, Palette } from 'lucide-react'
+import { Upload, FileText, Eye, Package, Calculator, Ruler, TrendingUp, Palette, AlertTriangle } from 'lucide-react'
 import { sendQuoteEmail } from "../utils/sendQuote"
 import { buildQuoteHtml } from "../utils/buildQuoteHtml"
 import aiEmpty from '../assets/ai-empty.svg'
@@ -135,7 +136,7 @@ export default function UploadAndJsonView() {
 
   // Calculate pricing when services change (coating-spesifinen)
   useEffect(() => {
-    if (selectedCoating && selectedVariant && data?.pinta_ala_analyysi?.pinta_ala_cm2 && organization?.industry_type === 'coating') {
+    if (selectedCoating && selectedVariant && data?.pinta_ala_analyysi?.pinta_ala_cm2 && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining') {
       const coating = COATING_OPTIONS.find(c => c.id === selectedCoating)
       const variant = coating?.variants.find(v => v.id === selectedVariant)
       
@@ -165,8 +166,8 @@ export default function UploadAndJsonView() {
           deliveryTime: getDeliveryTime(urgency)
         })
       }
-    } else if (organization?.industry_type !== 'coating') {
-      // Steel ja muut eivät käytä pricing-järjestelmää
+    } else if (organization?.industry_type === 'steel' || organization?.industry_type === 'machining') {
+      // Steel ja machining eivät käytä pricing-järjestelmää
       setPricing(null)
     }
   }, [selectedCoating, selectedVariant, batchSize, urgency, pretreatments, data, organization])
@@ -377,6 +378,7 @@ export default function UploadAndJsonView() {
       palvelu: Palette,
       hinnoittelu: Calculator,
       materiaalilista: FileText,
+      tarkistettavaa: AlertTriangle,
       ostolista: Eye,
       toleranssit: Ruler,
       operaatiot: Package
@@ -384,27 +386,36 @@ export default function UploadAndJsonView() {
     return icons[tabId] || Package
   }
 
-  // Helper function to check if tab is enabled
+  // ✅ KORJATTU: Helper function to check if tab is enabled
   function getTabEnabled(tabId) {
     switch (tabId) {
       case 'perustiedot':
         return !!data
+      
+      // ✅ COATING-TABIT: Toimivat kun EI ole steel/machining
       case 'mitat':
-        return !!data?.mitat
+        return !!data?.mitat && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining'
       case 'pinta-ala':
-        return !!data?.pinta_ala_analyysi
+        return !!data?.pinta_ala_analyysi && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining'
       case 'palvelu':
-        return !!data && organization?.industry_type === 'coating'
+        return !!data && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining'
       case 'hinnoittelu':
-        return !!pricing && organization?.industry_type === 'coating'
+        return !!pricing && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining'
+      
+      // ✅ STEEL-TABIT: Vain steel-organisaatioissa  
       case 'materiaalilista':
+        return !!data?.materiaalilista && organization?.industry_type === 'steel'
+      case 'tarkistettavaa':
         return !!data?.materiaalilista && organization?.industry_type === 'steel'
       case 'ostolista':
         return !!data?.materiaalilista && organization?.industry_type === 'steel'
+      
+      // ✅ MACHINING-TABIT
       case 'toleranssit':
         return !!data?.toleranssit && organization?.industry_type === 'machining'
       case 'operaatiot':
         return !!data?.koneistusoperaatiot && organization?.industry_type === 'machining'
+      
       default:
         return false
     }
@@ -447,7 +458,7 @@ export default function UploadAndJsonView() {
                 onChange={setActiveTab}
               />
 
-              {/* ✅ INDUSTRY-SPESIFISET PANEELIT */}
+              {/* ✅ KORJATTU: INDUSTRY-SPESIFISET PANEELIT */}
               
               {/* PERUSTIEDOT - Industry-spesifinen */}
               {activeTab === 'perustiedot' && (
@@ -466,30 +477,12 @@ export default function UploadAndJsonView() {
                 )
               )}
 
-              {/* STEEL-SPESIFISET TABIT */}
-              {activeTab === 'materiaalilista' && organization?.industry_type === 'steel' && (
-                <SteelMaterialListPanel
-                  data={data}
-                  editedData={editedData}
-                  onFieldSave={handleFieldEdit}
-                />
-              )}
-
-              {activeTab === 'ostolista' && organization?.industry_type === 'steel' && (
-                <SteelSummaryPanel
-                  data={data}
-                  materiaalilista={data?.materiaalilista}
-                  yhteenveto={data?.yhteenveto}
-                  liitokset={data?.liitokset}
-                />
-              )}
-
-              {/* COATING-SPESIFISET TABIT (säilyvät muuttumattomina) */}
-              {activeTab === 'mitat' && organization?.industry_type === 'coating' && (
+              {/* ✅ COATING-TABIT - Korjattu: Renderöidään kun EI ole steel/machining */}
+              {activeTab === 'mitat' && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining' && (
                 <MitatPanel mitat={data.mitat} />
               )}
 
-              {activeTab === 'pinta-ala' && organization?.industry_type === 'coating' && (
+              {activeTab === 'pinta-ala' && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining' && (
                 <PintaAlaPanel
                   pintaAla={data.pinta_ala_analyysi}
                   pricing={pricing}
@@ -497,7 +490,7 @@ export default function UploadAndJsonView() {
                 />
               )}
 
-              {activeTab === 'palvelu' && organization?.industry_type === 'coating' && (
+              {activeTab === 'palvelu' && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining' && (
                 <PalveluPanel
                   COATING_OPTIONS={COATING_OPTIONS}
                   selectedCoating={selectedCoating}
@@ -513,11 +506,52 @@ export default function UploadAndJsonView() {
                 />
               )}
 
-              {activeTab === 'hinnoittelu' && organization?.industry_type === 'coating' && (
+              {activeTab === 'hinnoittelu' && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining' && (
                 <Hinnoittelupanel
                   pricing={pricing}
                   urgency={urgency}
                 />
+              )}
+
+              {/* ✅ STEEL-TABIT - Vain steel-organisaatioissa */}
+              {activeTab === 'materiaalilista' && organization?.industry_type === 'steel' && (
+                <SteelMaterialListPanel
+                  data={data}
+                  editedData={editedData}
+                  onFieldSave={handleFieldEdit}
+                />
+              )}
+
+              {activeTab === 'tarkistettavaa' && organization?.industry_type === 'steel' && (
+                <SimpleMaterialDetectionPanel
+                  data={data}
+                  editedData={editedData}
+                  onFieldSave={handleFieldEdit}
+                />
+              )}
+
+              {activeTab === 'ostolista' && organization?.industry_type === 'steel' && (
+                <SteelSummaryPanel
+                  data={data}
+                  materiaalilista={data?.materiaalilista}
+                  yhteenveto={data?.yhteenveto}
+                  liitokset={data?.liitokset}
+                />
+              )}
+
+              {/* ✅ MACHINING-TABIT - Tulevaisuudessa */}
+              {activeTab === 'toleranssit' && organization?.industry_type === 'machining' && (
+                <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 text-center">
+                  <h3 className="text-lg font-semibold text-gray-700 mb-3">Toleranssi-analyysi</h3>
+                  <p className="text-gray-500">Tulossa pian...</p>
+                </div>
+              )}
+
+              {activeTab === 'operaatiot' && organization?.industry_type === 'machining' && (
+                <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 text-center">
+                  <h3 className="text-lg font-semibold text-gray-700 mb-3">Operaatio-analyysi</h3>
+                  <p className="text-gray-500">Tulossa pian...</p>
+                </div>
               )}
 
               {/* YHTEISET KOMPONENTIT */}
