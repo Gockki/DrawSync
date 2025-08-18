@@ -11,26 +11,36 @@ import {
   ADDITIONAL_COSTS,
   getDeliveryTime 
 } from '../utils/coatingOptions'
-import { getIndustryConfig } from '../utils/aiPrompts'  // ← New import
+import { getIndustryConfig } from '../utils/aiPrompts'
 import NavigationHeader from './NavigationHeader'
 import ProjectsShortcut from './ProjectsShortcut'
 import UploadSection from './UploadSection'
 import ImagePreview from './ImagePreview'
 import StatusOverview from './StatusOverview'
 import TabNavigation from './TabNavigation'
+
+// ✅ COATING KOMPONENTIT (säilyvät muuttumattomina)
 import PerustiedotPanel from './PerustiedotPanel'
 import MitatPanel from './MitatPanel'
 import PintaAlaPanel from './PintaAlaPanel'
 import PalveluPanel from './PalveluPanel'
 import Hinnoittelupanel from './Hinnoittelupanel'
+
+// ✅ STEEL KOMPONENTIT (uudet lisäykset)
+import SteelPerustiedotPanel from './SteelPerustiedotPanel'
+import SteelMaterialListPanel from './SteelMaterialListPanel'
+import SteelSummaryPanel from './SteelSummaryPanel'
+
+// ✅ YHTEISET KOMPONENTIT
 import NotesPanel from './NotesPanel'
 import ManualSurfaceAreaModel from './ManualSurfaceAreaModel'
 import ActionButtons from './ActionButtons'
 import StatusBadge from './StatusBadge'
-import FakeProgressOverlay from "./FakeProgressOverlay";
+import FakeProgressOverlay from "./FakeProgressOverlay"
+
 import { Upload, FileText, Eye, Package, Calculator, Ruler, TrendingUp, Palette } from 'lucide-react'
-import { sendQuoteEmail } from "../utils/sendQuote";
-import { buildQuoteHtml } from "../utils/buildQuoteHtml";
+import { sendQuoteEmail } from "../utils/sendQuote"
+import { buildQuoteHtml } from "../utils/buildQuoteHtml"
 import aiEmpty from '../assets/ai-empty.svg'
 import { useOrganization } from "../contexts/OrganizationContext"
 import { db } from "../services/database"
@@ -51,9 +61,9 @@ export default function UploadAndJsonView() {
   const [activeTab, setActiveTab] = useState('perustiedot')
   const [manualSurfaceArea, setManualSurfaceArea] = useState('')
   const [showManualInput, setShowManualInput] = useState(false)
-  const [fakeDone, setFakeDone] = useState(false);
+  const [fakeDone, setFakeDone] = useState(false)
 
-  // Service selections
+  // Service selections (coating-spesifiset)
   const [selectedCoating, setSelectedCoating] = useState('')
   const [selectedVariant, setSelectedVariant] = useState('')
   const [batchSize, setBatchSize] = useState('')
@@ -63,118 +73,122 @@ export default function UploadAndJsonView() {
   const { organization, user } = useOrganization()
 
   // ✅ Get industry configuration
-  const industryConfig = organization ? getIndustryConfig(organization.industry_type) : getIndustryConfig('coating')
+  const industryConfig = organization ? 
+    getIndustryConfig(organization.industry_type) : 
+    getIndustryConfig('coating')
 
-  // AUTH + load project
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) navigate('/')
-    })
-    const pid = sessionStorage.getItem('loadProjectId')
-    if (pid) {
-      loadProject(pid)
-      sessionStorage.removeItem('loadProjectId')
+  // Helper function to convert organization industry to canonical format
+  const toCanonicalIndustry = (orgType) => {
+    const mapping = {
+      'coating': 'coating',
+      'steel': 'steel', 
+      'machining': 'machining',
+      'pinnoitus': 'coating',
+      'teräs': 'steel',
+      'koneistus': 'machining'
     }
-  }, [navigate])
+    return mapping[orgType] || 'coating'
+  }
+
+  // Load project from session storage
+  useEffect(() => {
+    const projectId = sessionStorage.getItem('loadProjectId')
+    if (projectId) {
+      sessionStorage.removeItem('loadProjectId')
+      loadProject(projectId)
+    }
+  }, [])
 
   const loadProject = async (projectId) => {
-    if (!organization || !user) return
-    
     try {
-      // Hae kaikki käyttäjän projektit ja etsi oikea ID
-      const projects = await db.getDrawings(organization.id, user.id)
-      const project = projects.find(p => p.id === projectId)
-      
-      if (project) {
-        setData(project.gpt_analysis)
-        setEditedData(project.gpt_analysis?.perustiedot || {})
+      setLoading(true)
+      const { data: project, error } = await supabase
+        .from('drawings')
+        .select('*')
+        .eq('id', projectId)
+        .single()
+
+      if (error) throw error
+
+      // Simuloi tiedoston lataus
+      if (project.image_url) {
         setPreviewUrl(project.image_url)
-        setSavedDrawingId(project.id)
-        setSuccess(true)
-        setTimeout(() => setSuccess(false), 4000)
+        setFile({ name: project.filename, fromDatabase: true })
       }
-    } catch (error) {
-      console.error('Load project error:', error)
+
+      // Lataa GPT-analyysi
+      if (project.gpt_analysis) {
+        setData(project.gpt_analysis)
+        setEditedData(project.gpt_analysis.perustiedot || {})
+        setSavedDrawingId(projectId)
+      }
+      
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 4000)
+    } catch (err) {
+      console.error('Project load failed:', err)
+      alert(`Projektin lataus epäonnistui: ${err.message}`)
+    } finally {
+      setLoading(false)
     }
   }
 
-  // Pricing effect
+  // Calculate pricing when services change (coating-spesifinen)
   useEffect(() => {
-    if (data?.pinta_ala_analyysi?.pinta_ala_cm2 && selectedCoating && selectedVariant) {
-      const cm2 = data.pinta_ala_analyysi.pinta_ala_cm2
-      const m2 = cm2 / 10000
-      const weight = editedData.paino_kg || data.perustiedot?.paino_kg || 0
-      const coating = COATING_OPTIONS[selectedCoating]
-      const variant = coating.variants.find(v => v.id === selectedVariant)
-
+    if (selectedCoating && selectedVariant && data?.pinta_ala_analyysi?.pinta_ala_cm2 && organization?.industry_type === 'coating') {
+      const coating = COATING_OPTIONS.find(c => c.id === selectedCoating)
+      const variant = coating?.variants.find(v => v.id === selectedVariant)
+      
       if (coating && variant) {
-        const setupCost = ADDITIONAL_COSTS.setupCost
-        const pretreatCost = calculatePretreatmentCost(pretreatments, m2)
-        const coatPrice = coating.basePrice * variant.priceMultiplier
-        const coatCost = m2 * coatPrice
-        const subtotal = setupCost + pretreatCost + coatCost
-        const discount = subtotal * getBatchDiscount(batchSize)
-        const afterDisc = subtotal - discount
-        const urgentMult = getUrgencyMultiplier(urgency)
-        const afterUrgency = afterDisc * urgentMult
-        const vat = afterUrgency * ADDITIONAL_COSTS.vatRate
-        
+        const surfaceAreaM2 = data.pinta_ala_analyysi.pinta_ala_cm2 / 10000
+        const basePrice = surfaceAreaM2 * variant.pricePerM2
+        const batchDiscount = getBatchDiscount(batchSize)
+        const urgencyMultiplier = getUrgencyMultiplier(urgency)
+        const pretreatmentCost = calculatePretreatmentCost(pretreatments, surfaceAreaM2)
+
+        const subtotal = (basePrice + pretreatmentCost) * batchDiscount.multiplier * urgencyMultiplier.multiplier
+        const vat = subtotal * 0.24
+        const total = subtotal + vat + ADDITIONAL_COSTS.handling
+
         setPricing({
-          surfaceAreaCm2: cm2,
-          surfaceAreaM2: parseFloat(m2.toFixed(4)),
-          weight,
           coating: coating.name,
           variant: variant.name,
-          coatingPricePerM2: parseFloat(coatPrice.toFixed(2)),
-          setupCost,
-          pretreatmentCost: parseFloat(pretreatCost.toFixed(2)),
-          coatingCost: parseFloat(coatCost.toFixed(2)),
-          subtotal: parseFloat(subtotal.toFixed(2)),
-          batchDiscount: parseFloat(discount.toFixed(2)),
-          batchDiscountPercent: getBatchDiscount(batchSize) * 100,
-          urgencyMultiplier: urgentMult,
-          afterDiscountAndUrgency: parseFloat(afterUrgency.toFixed(2)),
-          vat: parseFloat(vat.toFixed(2)),
-          total: parseFloat((afterUrgency + vat).toFixed(2)),
-          pretreatments: [...pretreatments],
-          deliveryTime: getDeliveryTime(selectedCoating, urgency, batchSize)
+          surfaceAreaM2: surfaceAreaM2,
+          basePrice,
+          batchDiscount,
+          urgencyMultiplier,
+          pretreatmentCost,
+          pretreatments: pretreatments.map(id => ADDITIONAL_COSTS.pretreatments.find(p => p.id === id)).filter(Boolean),
+          subtotal,
+          vat,
+          total,
+          deliveryTime: getDeliveryTime(urgency)
         })
       }
-    } else {
+    } else if (organization?.industry_type !== 'coating') {
+      // Steel ja muut eivät käytä pricing-järjestelmää
       setPricing(null)
     }
-  }, [data, editedData, selectedCoating, selectedVariant, batchSize, urgency, pretreatments])
+  }, [selectedCoating, selectedVariant, batchSize, urgency, pretreatments, data, organization])
 
-  useEffect(() => {
-    // Nollaa variant kun coating vaihtuu
-    if (selectedCoating) {
-      setSelectedVariant('')
-    }
-  }, [selectedCoating])
-
-  // Handlers
   const handleDrop = (e) => {
     e.preventDefault()
-    const droppedFile = e.dataTransfer.files[0]
-    if (droppedFile) {
-      handleFileSelect(droppedFile, URL.createObjectURL(droppedFile))
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      const file = files[0]
+      setFile(file)
+      setPreviewUrl(URL.createObjectURL(file))
     }
   }
 
-  const handleFileSelect = (f, url) => {
-    setFile(f)
+  const handleFileSelect = (file, url) => {
+    setFile(file)
     setPreviewUrl(url)
   }
-  const toCanonicalIndustry = (t) => {
-  if (!t) return 'coating';
-  const v = String(t).toLowerCase().trim();
-  if (v === 'pinnoitus') return 'coating';
-  if (v === 'teräs') return 'steel';
-  if (v === 'koneistus') return 'machining';
-  return v; // jos jo 'coating' | 'steel' | 'machining'
-};
+
   const handleUpload = async () => {
     if (!file || !organization) return
+
     const form = new FormData()
     form.append('file', file)
     
@@ -186,7 +200,7 @@ export default function UploadAndJsonView() {
 
     const start = performance.now()
     try {
-      await new Promise(requestAnimationFrame);
+      await new Promise(requestAnimationFrame)
       const res = await fetch('http://localhost:8000/process', { 
         method: 'POST', 
         body: form 
@@ -204,7 +218,7 @@ export default function UploadAndJsonView() {
     } catch (err) {
       console.error(err)
       alert(`Virhe analysoinnissa: ${err.message}`)
-      setFakeDone(true);
+      setFakeDone(true)
     } finally {
       // ÄLÄ sulje overlaytä tässä – anna sen mennä 100% ja kutsua onFinish
       const MIN_MS = 3000
@@ -247,21 +261,21 @@ export default function UploadAndJsonView() {
   // ✅ Updated generateQuote function to accept parameters
   const generateQuote = async (recipientEmail, emailSubject, emailMessage) => {
     if (!pricing) {
-      throw new Error('Valitse ensin palvelu hinnoittelua varten!');
+      throw new Error('Valitse ensin palvelu hinnoittelua varten!')
     }
 
     try {
       // Rakenna HTML viesti
-      const html = buildQuoteHtml({ pricing, data });
+      const html = buildQuoteHtml({ pricing, data })
       
       // Käytä parametreja jos annettu, muuten fallback
-      const to = recipientEmail || import.meta.env.VITE_DEFAULT_QUOTE_TO || 'jere@mantox.fi';
-      const subject = emailSubject || `Tarjous – ${data?.perustiedot?.tuotenimi || data?.perustiedot?.tuotekoodi || 'Mantox'}`;
+      const to = recipientEmail || import.meta.env.VITE_DEFAULT_QUOTE_TO || 'jere@mantox.fi'
+      const subject = emailSubject || `Tarjous – ${data?.perustiedot?.tuotenimi || data?.perustiedot?.tuotekoodi || 'Mantox'}`
       
       // Combine custom message with HTML quote
-      let finalHtml = html;
+      let finalHtml = html
       if (emailMessage) {
-        finalHtml = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5;color:#111;white-space:pre-line;margin-bottom:24px;">${emailMessage}</div>${html}`;
+        finalHtml = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5;color:#111;white-space:pre-line;margin-bottom:24px;">${emailMessage}</div>${html}`
       }
 
       const resp = await sendQuoteEmail({
@@ -270,18 +284,18 @@ export default function UploadAndJsonView() {
         subject,
         html: finalHtml,
         replyTo: 'jere@mantox.fi'
-      });
+      })
 
       if (resp?.ok) {
-        alert(`Tarjous lähetetty: ${resp.id}`);
+        alert(`Tarjous lähetetty: ${resp.id}`)
       } else {
-        throw new Error('Lähetys epäonnistui (tuntematon virhe).');
+        throw new Error('Lähetys epäonnistui (tuntematon virhe).')
       }
     } catch (err) {
-      console.error('Quote generation error:', err);
-      throw err;
+      console.error('Quote generation error:', err)
+      throw err
     }
-  };
+  }
 
   const handleSaveProject = async () => {
     if (!data || !file || !organization || !user) {
@@ -303,16 +317,35 @@ export default function UploadAndJsonView() {
         .from('drawings')
         .getPublicUrl(path)
       
-      const drawingData = {
-        filename: file.name,
-        image_url: urlData.publicUrl,
-        product_code: editedData.tuotekoodi || data.perustiedot?.tuotekoodi || null,
-        product_name: editedData.tuotenimi || data.perustiedot?.tuotenimi || null,
-        material: editedData.materiaali || data.perustiedot?.materiaali || null,
-        weight_kg: parseFloat(editedData.paino_kg || data.perustiedot?.paino_kg) || null,
-        surface_area_cm2: data.pinta_ala_analyysi?.pinta_ala_cm2 || null,
-        ocr_data: data.processing_info || {},
-        gpt_analysis: data
+      // ✅ INDUSTRY-SPESIFINEN TALLENNUS
+      let drawingData
+      
+      if (organization.industry_type === 'steel') {
+        // UUSI: Steel-spesifinen tallennus
+        drawingData = {
+          filename: file.name,
+          image_url: urlData.publicUrl,
+          product_code: editedData.projekti_numero || data.perustiedot?.projekti_numero || null,
+          product_name: editedData.rakenteen_nimi || data.perustiedot?.rakenteen_nimi || null,
+          material: editedData.materiaaliluokka || data.perustiedot?.materiaaliluokka || null,
+          weight_kg: data.yhteenveto?.kokonaispaino_kg || null,
+          surface_area_cm2: null, // Steel ei käytä pinta-alaa
+          ocr_data: data.processing_info || {},
+          gpt_analysis: data
+        }
+      } else {
+        // VANHA: Coating-tallennus säilyy täsmälleen samana!
+        drawingData = {
+          filename: file.name,
+          image_url: urlData.publicUrl,
+          product_code: editedData.tuotekoodi || data.perustiedot?.tuotekoodi || null,
+          product_name: editedData.tuotenimi || data.perustiedot?.tuotenimi || null,
+          material: editedData.materiaali || data.perustiedot?.materiaali || null,
+          weight_kg: parseFloat(editedData.paino_kg || data.perustiedot?.paino_kg) || null,
+          surface_area_cm2: data.pinta_ala_analyysi?.pinta_ala_cm2 || null,
+          ocr_data: data.processing_info || {},
+          gpt_analysis: data
+        }
       }
       
       const saved = await db.saveDrawing(organization.id, user.id, drawingData)
@@ -332,10 +365,10 @@ export default function UploadAndJsonView() {
   const tabs = industryConfig.tabs.map(tab => ({
     ...tab,
     icon: getTabIcon(tab.id),
-    enabled: getTabEnabled ?? true 
+    enabled: getTabEnabled(tab.id)
   }))
 
-  // Helper function to get tab icons  — CHANGED to function declaration (hoisted)
+  // Helper function to get tab icons
   function getTabIcon(tabId) {
     const icons = {
       perustiedot: Package,
@@ -351,7 +384,7 @@ export default function UploadAndJsonView() {
     return icons[tabId] || Package
   }
 
-  // Helper function to check if tab is enabled — CHANGED to function declaration (hoisted)
+  // Helper function to check if tab is enabled
   function getTabEnabled(tabId) {
     switch (tabId) {
       case 'perustiedot':
@@ -414,25 +447,57 @@ export default function UploadAndJsonView() {
                 onChange={setActiveTab}
               />
 
-              {/* Panels */}
-              {activeTab === 'perustiedot' &&
-                <PerustiedotPanel
+              {/* ✅ INDUSTRY-SPESIFISET PANEELIT */}
+              
+              {/* PERUSTIEDOT - Industry-spesifinen */}
+              {activeTab === 'perustiedot' && (
+                organization?.industry_type === 'steel' ? (
+                  <SteelPerustiedotPanel
+                    data={data}
+                    editedData={editedData}
+                    onFieldSave={handleFieldEdit}
+                  />
+                ) : (
+                  <PerustiedotPanel
+                    data={data}
+                    editedData={editedData}
+                    onFieldSave={handleFieldEdit}
+                  />
+                )
+              )}
+
+              {/* STEEL-SPESIFISET TABIT */}
+              {activeTab === 'materiaalilista' && organization?.industry_type === 'steel' && (
+                <SteelMaterialListPanel
                   data={data}
                   editedData={editedData}
                   onFieldSave={handleFieldEdit}
                 />
-              }
-              {activeTab === 'mitat' &&
+              )}
+
+              {activeTab === 'ostolista' && organization?.industry_type === 'steel' && (
+                <SteelSummaryPanel
+                  data={data}
+                  materiaalilista={data?.materiaalilista}
+                  yhteenveto={data?.yhteenveto}
+                  liitokset={data?.liitokset}
+                />
+              )}
+
+              {/* COATING-SPESIFISET TABIT (säilyvät muuttumattomina) */}
+              {activeTab === 'mitat' && organization?.industry_type === 'coating' && (
                 <MitatPanel mitat={data.mitat} />
-              }
-              {activeTab === 'pinta-ala' &&
+              )}
+
+              {activeTab === 'pinta-ala' && organization?.industry_type === 'coating' && (
                 <PintaAlaPanel
                   pintaAla={data.pinta_ala_analyysi}
                   pricing={pricing}
                   onManualClick={() => setShowManualInput(true)}
                 />
-              }
-              {activeTab === 'palvelu' &&
+              )}
+
+              {activeTab === 'palvelu' && organization?.industry_type === 'coating' && (
                 <PalveluPanel
                   COATING_OPTIONS={COATING_OPTIONS}
                   selectedCoating={selectedCoating}
@@ -446,17 +511,18 @@ export default function UploadAndJsonView() {
                   pretreatments={pretreatments}
                   onPretreatmentChange={handlePretreatmentChange}
                 />
-              }
-              {activeTab === 'hinnoittelu' &&
+              )}
+
+              {activeTab === 'hinnoittelu' && organization?.industry_type === 'coating' && (
                 <Hinnoittelupanel
                   pricing={pricing}
                   urgency={urgency}
                 />
-              }
+              )}
 
+              {/* YHTEISET KOMPONENTIT */}
               <NotesPanel notes={data.huomiot || data.notes} />
 
-              {/* ✅ Updated ActionButtons with new props */}
               <ActionButtons
                 onSaveProject={handleSaveProject}
                 onGenerateQuote={generateQuote}
@@ -479,63 +545,50 @@ export default function UploadAndJsonView() {
                   <StatusBadge type="success" text={savedDrawingId ? 'Projekti ladattu!' : 'Analyysi valmis!'} />
                 </div>
               )}
-
-              {showManualInput && (
-                <ManualSurfaceAreaModel
-                  visible={showManualInput}
-                  manualArea={manualSurfaceArea}
-                  onChange={setManualSurfaceArea}
-                  onSave={handleManualSurfaceArea}
-                  onClose={() => setShowManualInput(false)}
-                />
-              )}
             </>
           ) : (
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-16 text-center">
-              <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-full border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-sm">
-                <img
-                  src={aiEmpty}
-                  alt="AI-analyysi"
-                  className="h-12 w-12 object-contain select-none"
-                  draggable="false"
-                />
-              </div>
-
-              <h3 className="text-3xl font-bold text-gray-900 mb-4">
-                Ei analyysituloksia
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-12 text-center">
+              <img src={aiEmpty} alt="AI Analysis" className="w-24 h-24 mx-auto mb-6 opacity-50" />
+              <h3 className="text-xl font-semibold text-gray-700 mb-3">
+                {organization?.industry_type === 'steel' ? 'Teräsrakenne-analyysi' : 
+                 organization?.industry_type === 'machining' ? 'Koneistusanalyysi' :
+                 'Pinnoitusanalyysi'}
               </h3>
-              <p className="text-xl text-gray-600 mb-8">
-                Lataa ja analysoi {industryConfig.name.toLowerCase()} piirustus nähdäksesi tulokset
+              <p className="text-gray-500 max-w-md mx-auto">
+                {organization?.industry_type === 'steel' ? 
+                  'Lataa teräsrakennepiirustus analysoidaksesi materiaalilistan ja laskettava ostotarpeita.' :
+                 organization?.industry_type === 'machining' ?
+                  'Lataa koneistuspiirustus analysoidaksesi toleranssit ja työoperaatiot.' :
+                  'Lataa pinnoitettavan tuotteen piirustus saadaksesi tarkan pinta-ala-analyysin ja hintatarjouksen.'}
               </p>
-              <div className="flex flex-wrap gap-4 justify-center text-sm text-gray-500">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  <span>PDF, PNG, JPG</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Eye className="h-4 w-4" />
-                  <span>GPT-5 {industryConfig.icon}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Calculator className="h-4 w-4" />
-                  <span>{industryConfig.name}</span>
-                </div>
-              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Overlay siirretty gridin ulkopuolelle */}
-      <FakeProgressOverlay
-        open={loading}
-        complete={fakeDone}
-        onFinish={() => { setLoading(false); setFakeDone(false); }}
-        gif="/loaders/analysis.gif"
-        message="Analysoidaan piirustusta…"
-        minMs={3000}
-        finishDuration={600}
-      />
+      {/* Progress Overlay */}
+      {(loading || !fakeDone) && (
+        <FakeProgressOverlay
+          open={loading}
+          complete={!!data}
+          onFinish={() => setLoading(false)}
+          message={organization?.industry_type === 'steel' ? 
+            'Analysoidaan teräsrakennetta...' :
+            organization?.industry_type === 'machining' ?
+            'Analysoidaan koneistuspiirustusta...' :
+            'Analysoidaan pinnoituspiirustusta...'}
+        />
+      )}
+
+      {/* Manual Surface Area Modal */}
+      {showManualInput && (
+        <ManualSurfaceAreaModel
+          value={manualSurfaceArea}
+          onChange={setManualSurfaceArea}
+          onSave={handleManualSurfaceArea}
+          onCancel={() => setShowManualInput(false)}
+        />
+      )}
     </div>
   )
 }
