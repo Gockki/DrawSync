@@ -134,43 +134,67 @@ export default function UploadAndJsonView() {
     }
   }
 
-  // Calculate pricing when services change (coating-spesifinen)
-  useEffect(() => {
-    if (selectedCoating && selectedVariant && data?.pinta_ala_analyysi?.pinta_ala_cm2 && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining') {
-      const coating = COATING_OPTIONS.find(c => c.id === selectedCoating)
-      const variant = coating?.variants.find(v => v.id === selectedVariant)
-      
-      if (coating && variant) {
-        const surfaceAreaM2 = data.pinta_ala_analyysi.pinta_ala_cm2 / 10000
-        const basePrice = surfaceAreaM2 * variant.pricePerM2
-        const batchDiscount = getBatchDiscount(batchSize)
-        const urgencyMultiplier = getUrgencyMultiplier(urgency)
-        const pretreatmentCost = calculatePretreatmentCost(pretreatments, surfaceAreaM2)
 
-        const subtotal = (basePrice + pretreatmentCost) * batchDiscount.multiplier * urgencyMultiplier.multiplier
-        const vat = subtotal * 0.24
-        const total = subtotal + vat + ADDITIONAL_COSTS.handling
 
-        setPricing({
-          coating: coating.name,
-          variant: variant.name,
-          surfaceAreaM2: surfaceAreaM2,
-          basePrice,
-          batchDiscount,
-          urgencyMultiplier,
-          pretreatmentCost,
-          pretreatments: pretreatments.map(id => ADDITIONAL_COSTS.pretreatments.find(p => p.id === id)).filter(Boolean),
-          subtotal,
-          vat,
-          total,
-          deliveryTime: getDeliveryTime(urgency)
-        })
-      }
-    } else if (organization?.industry_type === 'steel' || organization?.industry_type === 'machining') {
-      // Steel ja machining eivät käytä pricing-järjestelmää
+useEffect(() => {
+  if (selectedCoating && selectedVariant && data?.pinta_ala_analyysi?.pinta_ala_cm2 && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining') {
+    const coating = COATING_OPTIONS[selectedCoating]  //Korjattu objekti-käyttö
+    
+    if (!coating) {
       setPricing(null)
+      return
     }
-  }, [selectedCoating, selectedVariant, batchSize, urgency, pretreatments, data, organization])
+    
+    const variant = coating.variants?.find(v => v.id === selectedVariant)
+    
+    if (coating && variant) {
+      const surfaceAreaCm2 = data.pinta_ala_analyysi.pinta_ala_cm2
+      const surfaceAreaM2 = surfaceAreaCm2 / 10000
+      
+      const basePrice = coating.basePrice * variant.priceMultiplier
+      const coatingCost = surfaceAreaM2 * basePrice
+      
+      const batchDiscount = getBatchDiscount(batchSize)
+      const urgencyMultiplier = getUrgencyMultiplier(urgency)
+      const pretreatmentCost = calculatePretreatmentCost(pretreatments, surfaceAreaM2)
+      
+      const setupCost = ADDITIONAL_COSTS?.setupCost || 50.00
+      
+      const subtotal = setupCost + coatingCost + pretreatmentCost
+      const batchDiscountAmount = subtotal * batchDiscount
+      const afterDiscount = subtotal - batchDiscountAmount
+      const urgencyAmount = afterDiscount * (urgencyMultiplier - 1)
+      const afterDiscountAndUrgency = afterDiscount + urgencyAmount
+      
+      const vat = afterDiscountAndUrgency * 0.24
+      const total = afterDiscountAndUrgency + vat
+
+      setPricing({
+        coating: coating.name,
+        variant: variant.name,
+        surfaceAreaCm2: surfaceAreaCm2,
+        surfaceAreaM2: surfaceAreaM2,
+        weight: data?.perustiedot?.paino_kg || 0,
+        basePrice: basePrice,
+        coatingCost: coatingCost,
+        coatingPricePerM2: basePrice,
+        setupCost: setupCost,
+        pretreatmentCost: pretreatmentCost,
+        batchDiscount: batchDiscountAmount,
+        batchDiscountPercent: Math.round(batchDiscount * 100),
+        urgencyMultiplier: urgencyMultiplier,
+        urgencyAmount: urgencyAmount,
+        subtotal: subtotal,
+        afterDiscountAndUrgency: afterDiscountAndUrgency,
+        vat: vat,
+        total: total,
+        deliveryTime: getDeliveryTime(selectedCoating, urgency, batchSize)
+      })
+    }
+  } else {
+    setPricing(null)
+  }
+}, [selectedCoating, selectedVariant, batchSize, urgency, pretreatments, data, organization])
 
   const handleDrop = (e) => {
     e.preventDefault()

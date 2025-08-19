@@ -1,6 +1,7 @@
 import React from "react";
 import { Calculator } from "lucide-react";
 
+
 export default function Hinnoittelupanel({ pricing, urgency }) {
   if (!pricing) {
     return (
@@ -10,10 +11,31 @@ export default function Hinnoittelupanel({ pricing, urgency }) {
           Valitse palvelu hinnoittelua varten
         </h4>
         <p className="text-gray-600">
-          Siirry “Palvelu”-välilehdelle valitaksesi pinnoitteen
+          Siirry "Palvelu"-välilehdelle valitaksesi pinnoitteen
         </p>
       </div>
     );
+  }
+
+  // ✅ TURVALLISET DEFAULT ARVOT
+  const safePricing = {
+    surfaceAreaCm2: pricing.surfaceAreaCm2 || 0,
+    surfaceAreaM2: pricing.surfaceAreaM2 || 0,
+    weight: pricing.weight || 0,
+    coating: pricing.coating || 'Tuntematon',
+    variant: pricing.variant || 'Tuntematon',
+    setupCost: pricing.setupCost || 0,
+    pretreatmentCost: pricing.pretreatmentCost || 0,
+    coatingCost: pricing.coatingCost || 0,
+    coatingPricePerM2: pricing.coatingPricePerM2 || 0,
+    subtotal: pricing.subtotal || 0,
+    batchDiscount: pricing.batchDiscount || 0,
+    batchDiscountPercent: pricing.batchDiscountPercent || 0,
+    urgencyMultiplier: pricing.urgencyMultiplier || 1,
+    urgencyAmount: pricing.urgencyAmount || 0,
+    afterDiscountAndUrgency: pricing.afterDiscountAndUrgency || 0,
+    vat: pricing.vat || 0,
+    total: pricing.total || 0
   }
 
   return (
@@ -30,21 +52,23 @@ export default function Hinnoittelupanel({ pricing, urgency }) {
           <div>
             <label className="text-gray-600 block mb-1">Pinta-ala</label>
             <p className="font-semibold">
-              {pricing.surfaceAreaCm2} cm² ({pricing.surfaceAreaM2} m²)
+              {safePricing.surfaceAreaCm2.toFixed(0)} cm² ({safePricing.surfaceAreaM2.toFixed(4)} m²)
             </p>
           </div>
           <div>
             <label className="text-gray-600 block mb-1">Paino</label>
-            <p className="font-semibold">{pricing.weight} kg</p>
+            <p className="font-semibold">{safePricing.weight.toFixed(1)} kg</p>
           </div>
           <div>
             <label className="text-gray-600 block mb-1">Palvelu</label>
-            <p className="font-semibold">{pricing.coating}</p>
-            <p className="text-xs text-gray-500">{pricing.variant}</p>
+            <p className="font-semibold">{safePricing.coating}</p>
+            <p className="text-xs text-gray-500">{safePricing.variant}</p>
           </div>
           <div>
             <label className="text-gray-600 block mb-1">Sarjakoko</label>
-            <p className="font-semibold">{pricing.batchDiscountPercent ? null : "Ei valittu"}</p>
+            <p className="font-semibold">
+              {safePricing.batchDiscountPercent > 0 ? `${safePricing.batchDiscountPercent}% alennus` : "Ei alennusta"}
+            </p>
           </div>
         </div>
       </div>
@@ -58,59 +82,64 @@ export default function Hinnoittelupanel({ pricing, urgency }) {
           <div className="space-y-4 font-mono text-sm">
             <div className="flex justify-between py-2 border-b border-green-200">
               <span>Asetuskustannus:</span>
-              <span>{pricing.setupCost.toFixed(2)} €</span>
+              <span>{safePricing.setupCost.toFixed(2)} €</span>
             </div>
-            {pricing.pretreatmentCost > 0 && (
+            
+            {safePricing.pretreatmentCost > 0 && (
               <div className="flex justify-between py-2 border-b border-green-200">
                 <span>Esikäsittelyt:</span>
-                <span>{pricing.pretreatmentCost.toFixed(2)} €</span>
+                <span>{safePricing.pretreatmentCost.toFixed(2)} €</span>
               </div>
             )}
+            
             <div className="flex justify-between py-2 border-b border-green-200">
-              <span>{pricing.coating}:</span>
+              <span>{safePricing.coating}:</span>
               <span>
-                {pricing.coatingCost.toFixed(2)} € (
-                {pricing.coatingPricePerM2} €/m²)
+                {safePricing.coatingCost.toFixed(2)} € ({safePricing.coatingPricePerM2.toFixed(2)} €/m²)
               </span>
             </div>
+            
             <div className="flex justify-between py-3 border-t-2 border-green-300 font-semibold">
               <span>Välisumma:</span>
-              <span>{pricing.subtotal.toFixed(2)} €</span>
+              <span>{safePricing.subtotal.toFixed(2)} €</span>
             </div>
-            {pricing.batchDiscount > 0 && (
+            
+            {safePricing.batchDiscount > 0 && (
               <div className="flex justify-between py-2 text-green-700">
-                <span>
-                  Sarjakoko-alennus (-{pricing.batchDiscountPercent}%):
-                </span>
-                <span>-{pricing.batchDiscount.toFixed(2)} €</span>
+                <span>Sarjakoko-alennus (-{safePricing.batchDiscountPercent}%):</span>
+                <span>-{safePricing.batchDiscount.toFixed(2)} €</span>
               </div>
             )}
-            {pricing.urgencyMultiplier !== 1 && (
+            
+            {safePricing.urgencyMultiplier !== 1 && (
               <div className="flex justify-between py-2 text-red-600">
                 <span>
-                  Kiireellisyys (+{((pricing.urgencyMultiplier - 1) * 100).toFixed(0)}%
-                  ):
+                  Kiireellisyys (+{((safePricing.urgencyMultiplier - 1) * 100).toFixed(0)}%):
                 </span>
-                <span>
-                  +{(pricing.total - pricing.afterDiscountAndUrgency).toFixed(2)} €
-                </span>
+                <span>+{safePricing.urgencyAmount.toFixed(2)} €</span>
               </div>
             )}
+            
             <div className="flex justify-between py-2 font-semibold border-b border-green-200">
               <span>Yhteensä (alv 0%):</span>
-              <span>{pricing.afterDiscountAndUrgency.toFixed(2)} €</span>
+              <span>{safePricing.afterDiscountAndUrgency.toFixed(2)} €</span>
             </div>
+            
             <div className="flex justify-between py-2">
               <span>ALV 24%:</span>
-              <span>{pricing.vat.toFixed(2)} €</span>
+              <span>{safePricing.vat.toFixed(2)} €</span>
             </div>
+            
             <div className="flex justify-between py-4 border-t-4 border-green-400 text-xl font-bold bg-gradient-to-r from-green-100 to-emerald-100 rounded-lg px-4">
               <span>KOKONAISHINTA:</span>
-              <span>{pricing.total.toFixed(2)} €</span>
+              <span>{safePricing.total.toFixed(2)} €</span>
             </div>
           </div>
+          
           <div className="mt-6 text-center text-sm text-gray-600 space-y-1">
-            <p>📅 Toimitusaika: 7-14 päivää ({urgency})</p>
+            <p>📅 Toimitusaika: {pricing.deliveryTime ? 
+              `${pricing.deliveryTime.min}-${pricing.deliveryTime.max} päivää` : 
+              '7-14 päivää'} ({urgency || 'normaali'})</p>
             <p>⏰ Voimassaolo: 30 päivää | 💳 Maksuehto: 14 pv netto</p>
           </div>
         </div>
