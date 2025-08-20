@@ -1,4 +1,7 @@
 // src/utils/sendQuote.js
+
+import { apiClient } from './apiClient'
+
 export async function sendQuoteEmail({ to, cc = [], subject, html, replyTo = "noreply@mantox.fi" }) {
   const body = {
     to: Array.isArray(to) ? to : [to],

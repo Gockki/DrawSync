@@ -18,6 +18,7 @@ import UploadSection from './UploadSection'
 import ImagePreview from './ImagePreview'
 import StatusOverview from './StatusOverview'
 import TabNavigation from './TabNavigation'
+import { apiClient } from "../utils/apiClient"
 
 // ✅ COATING KOMPONENTIT (säilyvät muuttumattomina)
 import PerustiedotPanel from './PerustiedotPanel'
@@ -211,47 +212,54 @@ useEffect(() => {
     setPreviewUrl(url)
   }
 
-  const handleUpload = async () => {
-    if (!file || !organization) return
+const handleUpload = async () => {
+  if (!file || !organization) return
 
-    const form = new FormData()
-    form.append('file', file)
+  const form = new FormData()
+  form.append('file', file)
+  form.append('industry_type', toCanonicalIndustry(organization?.industry_type))
+
+  setLoading(true)
+  setFakeDone(false)
+
+  const start = performance.now()
+  try {
+    await new Promise(requestAnimationFrame)
     
-    // ✅ Send industry_type to backend for prompt selection
-    form.append('industry_type', toCanonicalIndustry(organization?.industry_type))
-
-    setLoading(true)
-    setFakeDone(false)
-
-    const start = performance.now()
-    try {
-      await new Promise(requestAnimationFrame)
-      const res = await fetch('http://localhost:8000/process', { 
-        method: 'POST', 
-        body: form 
-      })
-      const json = await res.json()
-      
-      if (json.success) {
-        setData(json)
-        setEditedData(json.perustiedot || {})
-        setSuccess(true)
-        setTimeout(() => setSuccess(false), 4000)
-      } else {
-        throw new Error(json.error || 'Analyysi epäonnistui')
-      }
-    } catch (err) {
-      console.error(err)
-      alert(`Virhe analysoinnissa: ${err.message}`)
-      setFakeDone(true)
-    } finally {
-      // ÄLÄ sulje overlaytä tässä – anna sen mennä 100% ja kutsua onFinish
-      const MIN_MS = 3000
-      const elapsed = performance.now() - start
-      const waitLeft = Math.max(0, MIN_MS - elapsed)
-      setTimeout(() => setFakeDone(true), waitLeft)
+    // ✅ KÄYTÄ AUTHENTICATED API CLIENTIA
+    const json = await apiClient.post('/process', form)
+    
+    if (json.success) {
+      setData(json)
+      setEditedData(json.perustiedot || {})
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 4000)
+    } else {
+      throw new Error(json.error || 'Analyysi epäonnistui')
     }
+  } catch (err) {
+    console.error('Upload error:', err)
+    
+    // ✅ PAREMPI VIRHEENKÄSITTELY
+    if (err.message.includes('Not authenticated')) {
+      alert('Kirjaudu sisään jatkaaksesi')
+      // Ohjaa login sivulle tai päivitä auth
+      window.location.reload()
+    } else if (err.message.includes('403')) {
+      alert('Ei käyttöoikeutta organisaatioon')
+    } else {
+      alert(`Virhe analysoinnissa: ${err.message}`)
+    }
+    
+    setFakeDone(true)
+  } finally {
+    const MIN_MS = 3000
+    const elapsed = performance.now() - start
+    const waitLeft = Math.max(0, MIN_MS - elapsed)
+    setTimeout(() => setFakeDone(true), waitLeft)
   }
+}
+
 
   // Jos data valmistuu nopeasti mutta fakeDone ei ole ehtinyt päivittyä, pakota valmistuminen
   useEffect(() => {

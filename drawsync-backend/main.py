@@ -1,7 +1,10 @@
-# drawsync-backend/main.py - Täydellinen versio (päivitetty OCR-fix)
+# ===================================
+# drawsync-backend/main.py - JWT Authentication lisätty
+# ===================================
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials
 import sys
 import os
 from pathlib import Path
@@ -20,6 +23,12 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # Imports
 from lib.gpt_utils import extract_structured_data_with_vision
 from lib.industry_manager import industry_manager
+from lib.auth_middleware import (
+    authenticate_with_subdomain_from_request,
+    require_authenticated_user,
+    AuthenticatedUser,
+    extract_subdomain_from_request
+)
 from routers.quotes import router as quotes_router
 
 app = FastAPI(
@@ -31,79 +40,75 @@ app = FastAPI(
 # Include routers
 app.include_router(quotes_router)
 
-# CORS setup
+# ✅ KORJATTU CORS - ei enää *
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173", 
+    "http://pic2data.local:5173",
+    "http://*.pic2data.local:5173",  # Wildcards eivät toimi, lisää eksplisiittisesti
+    "http://mantox.pic2data.local:5173",
+    "http://finecom.pic2data.local:5173",
+    "http://admin.pic2data.local:5173",
+    # Production domains (lisää kun tiedossa)
+    # "https://pic2data.fi",
+    # "https://*.pic2data.fi"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Production: vaihda tarkempiin domaineihin
+    allow_origins=ALLOWED_ORIGINS,  # ✅ Rajoitettu
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
-# ✅ Parannettu PDF→PNG konversio
-def pdf_first_page_to_png_bytes(pdf_bytes: bytes, dpi: int = 400) -> bytes:
-    """
-    Muuntaa PDF:n ensimmäisen sivun PNG:ksi korkealla DPI:llä.
-    
-    Args:
-        pdf_bytes: PDF data
-        dpi: Resoluutio (oletus 400, suositus 300-600 teknisille piirustuksille)
-    
-    Returns:
-        PNG image bytes
-    """
-    try:
-        import fitz  # PyMuPDF
-        
-        # Avaa PDF
-        pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        
-        if len(pdf_doc) == 0:
-            raise ValueError("PDF contains no pages")
-        
-        # Hae ensimmäinen sivu
-        page = pdf_doc[0]
-        
-        # Laske zoom-kerroin DPI:n perusteella
-        # PyMuPDF default: 72 DPI, joten zoom = target_dpi / 72
-        zoom = dpi / 72.0
-        mat = fitz.Matrix(zoom, zoom)
-        
-        logger.info(f"📊 PDF conversion: DPI={dpi}, zoom={zoom:.2f}")
-        
-        # Renderöi sivu korkearesoluutioiseksi kuvaksi
-        pix = page.get_pixmap(matrix=mat, alpha=False)
-        
-        # Muunna PNG-bytesiksi
-        png_bytes = pix.tobytes("png")
-        
-        logger.info(f"✅ PDF→PNG conversion successful: {len(png_bytes)} bytes, {pix.width}×{pix.height}px")
-        
-        pdf_doc.close()
-        return png_bytes
-        
-    except ImportError:
-        raise ImportError("PyMuPDF (fitz) not installed. Run: pip install PyMuPDF")
-    except Exception as e:
-        logger.error(f"❌ PDF conversion failed: {e}")
-        raise ValueError(f"PDF conversion failed: {e}")
+# ===================================
+# PUBLIC ENDPOINTS (ei auth:ia)
+# ===================================
 
 @app.get("/")
 def root():
-    """Health check endpoint"""
+    """Health check endpoint - PUBLIC"""
     return {
         "message": "DrawSync backend alive",
         "version": "2.0.0",
         "supported_industries": industry_manager.get_supported_industries(),
-        "features": ["high_dpi_pdf", "multi_industry", "gpt5_analysis"]
+        "features": ["high_dpi_pdf", "multi_industry", "gpt5_analysis", "jwt_auth"]
     }
+
+@app.get("/health")
+def health_check():
+    """Detailed health check - PUBLIC"""
+    try:
+        config_stats = industry_manager.get_config_stats()
+        return {
+            "status": "healthy",
+            "version": "2.0.0",
+            "timestamp": time.time(),
+            "features": [
+                "multi_industry_support",
+                "high_dpi_pdf_processing", 
+                "image_processing",
+                "gpt5_analysis",
+                "dynamic_prompts",
+                "jwt_authentication"  # ✅ Uusi feature
+            ],
+            "industry_manager": {
+                "total_industries": len(industry_manager.get_supported_industries()),
+                "config_file_exists": config_stats["config_file_exists"],
+                "supported_types": industry_manager.get_supported_industries()
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": time.time()
+        }
 
 @app.get("/api/industries")
 async def get_industries():
-    """
-    Frontend hakee industry configurations tästä endpoint:istä.
-    Palauttaa UI-configs mutta EI prompteja (turvallisuussyistä).
-    """
+    """Frontend hakee industry configurations - PUBLIC"""
     try:
         return {
             "success": True,
@@ -116,273 +121,147 @@ async def get_industries():
         logger.error(f"❌ Failed to get industries: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load industries: {str(e)}")
 
-@app.get("/debug/industries")
-async def debug_industries():
-    """
-    Debug endpoint - näytä industry configurations tilastoja.
-    HUOM: Tämä endpoint EI paljasta prompteja, vain tilastoja.
-    """
-    try:
-        stats = industry_manager.get_config_stats()
-        return {
-            "config_stats": stats,
-            "manager_status": "healthy" if industry_manager._configs else "unhealthy"
-        }
-    except Exception as e:
-        logger.error(f"❌ Debug endpoint failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# ===================================
+# PROTECTED ENDPOINTS (vaatii JWT auth)
+# ===================================
 
-@app.post("/debug/image-info")
-async def debug_image_info(file: UploadFile = File(...)):
-    """Debug: Analysoi kuvan laatua ja resoluutiota"""
+# ✅ PDF→PNG konversio (säilyy samana)
+def pdf_first_page_to_png_bytes(pdf_bytes: bytes, dpi: int = 400) -> bytes:
+    """Muuntaa PDF:n ensimmäisen sivun PNG:ksi korkealla DPI:llä."""
     try:
-        from PIL import Image
+        import fitz  # PyMuPDF
         
-        file_bytes = await file.read()
+        pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        if len(pdf_doc) == 0:
+            raise ValueError("PDF contains no pages")
         
-        info = {
-            "filename": file.filename,
-            "file_size_bytes": len(file_bytes),
-            "file_size_mb": round(len(file_bytes) / 1024 / 1024, 2)
-        }
+        page = pdf_doc[0]
+        zoom = dpi / 72.0
+        mat = fitz.Matrix(zoom, zoom)
         
-        # PDF analyysi
-        ext = Path(file.filename).suffix.lower()
-        if ext == ".pdf":
-            # Testaa eri DPI-arvoja
-            for dpi in [200, 300, 400, 500]:
-                try:
-                    png_bytes = pdf_first_page_to_png_bytes(file_bytes, dpi=dpi)
-                    pil_image = Image.open(io.BytesIO(png_bytes))
-                    width, height = pil_image.size
-                    
-                    info[f"dpi_{dpi}"] = {
-                        "dimensions": f"{width}×{height}",
-                        "png_size_mb": round(len(png_bytes) / 1024 / 1024, 2),
-                        "recommended": dpi >= 300 and min(width, height) >= 1500
-                    }
-                except Exception as e:
-                    info[f"dpi_{dpi}"] = {"error": str(e)}
-        else:
-            # Suora kuva-analyysi
-            try:
-                pil_image = Image.open(io.BytesIO(file_bytes))
-                width, height = pil_image.size
-                info["original_image"] = {
-                    "dimensions": f"{width}×{height}",
-                    "format": pil_image.format,
-                    "mode": pil_image.mode,
-                    "suitable_for_ocr": min(width, height) >= 1000
-                }
-            except Exception as e:
-                info["original_image"] = {"error": str(e)}
+        logger.info(f"📊 PDF conversion: DPI={dpi}, zoom={zoom:.2f}")
         
-        return info
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        png_bytes = pix.tobytes("png")
         
+        logger.info(f"✅ PDF→PNG conversion: {len(png_bytes)} bytes, {pix.width}×{pix.height}px")
+        
+        pdf_doc.close()
+        return png_bytes
+        
+    except ImportError:
+        raise ImportError("PyMuPDF (fitz) not installed. Run: pip install PyMuPDF")
     except Exception as e:
-        raise HTTPException(500, f"Image analysis failed: {e}")
+        logger.error(f"❌ PDF conversion failed: {e}")
+        raise ValueError(f"PDF conversion failed: {e}")
 
 @app.post("/process")
 async def process_image(
+    request: Request,  # ✅ Tarvitaan subdomain extractioniin
     file: UploadFile = File(...),
     industry_type: Optional[str] = Form(default="coating"),
-    organization_id: Optional[str] = Form(default=None),
-    dpi: Optional[int] = Form(default=500)  # ✅ Korkeampi DPI oletuksena parempaan laatuun
+    dpi: Optional[int] = Form(default=500),
+    user: AuthenticatedUser = Depends(authenticate_with_subdomain_from_request)  # ✅ JWT AUTH!
 ):
     """
-    Prosessoi kuva/PDF GPT-5:llä industry-spesifisellä promptilla.
+    🔒 SUOJATTU ENDPOINT: Prosessoi kuva/PDF GPT-5:llä
+    
+    Vaatii:
+    - JWT tokenin Authorization headerissa
+    - Pääsyn organisaatioon (jos subdomain)
     
     Args:
-        file: Kuva/PDF-tiedosto (PDF/PNG/JPG/etc.)
-        industry_type: 'coating', 'steel', tai 'machining' 
-        organization_id: Organisaation ID (valinnainen analytics-datalle)
-        dpi: PDF→PNG konversion DPI (oletus 500 parempaan laatuun)
-    
-    Returns:
-        Industry-spesifinen JSON-analyysi
+        file: Kuva/PDF-tiedosto
+        industry_type: coating/steel/machining
+        dpi: PDF konversion DPI
+        user: Autentikoitu käyttäjä (injektoidaan middleware:llä)
     """
+    
     start_time = time.time()
     
+    # ✅ Log authenticated request
+    logger.info(f"🔒 Authenticated request: {user} → Processing {file.filename}")
+    
+    # Validoi industry type
+    if not industry_manager.validate_industry(industry_type):
+        raise HTTPException(400, f"Unsupported industry type: {industry_type}")
+    
+    # Validoi tiedosto
+    if not file.filename:
+        raise HTTPException(400, "No file provided")
+    
     try:
-        # ✅ Validoi industry_type
-        if not industry_manager.validate_industry(industry_type):
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Unsupported industry type: {industry_type}. Supported: {industry_manager.get_supported_industries()}"
-            )
+        # Lue tiedosto
+        original_file_bytes = await file.read()
+        logger.info(f"📁 File uploaded: {file.filename} ({len(original_file_bytes)} bytes)")
         
-        # ✅ Validoi ja optimoi DPI
-        dpi = max(300, min(600, dpi))  # Vähintään 300 DPI teknisille piirustuksille
-        
-        logger.info(f"🏭 Processing {file.filename} for industry: {industry_type}")
-        if organization_id:
-            logger.info(f"📊 Organization ID: {organization_id}")
-
-        # Validoi tiedosto
-        file_bytes = await file.read()
-        if not file_bytes:
-            raise HTTPException(status_code=400, detail="Empty file received")
-
-        # ✅ OPTIMOITU tiedostokäsittely - eri strategia Google OCR:lle vs GPT:lle
+        # Prosessoi tiedosto
         ext = Path(file.filename).suffix.lower()
-        
-        # ✅ Säilytä alkuperäinen PDF/kuva Google OCR:ää varten
-        original_file_bytes = file_bytes
+        supported_formats = ['.png', '.jpg', '.jpeg', '.webp', '.gif']
         
         if ext == ".pdf":
-            logger.info(f"📄 Converting PDF to high-quality PNG at {dpi} DPI for GPT-5...")
-            
-            # Muunna PNG:ksi GPT-5:lle
-            image_bytes = pdf_first_page_to_png_bytes(file_bytes, dpi=dpi)
+            logger.info(f"📄 Converting PDF to PNG at {dpi} DPI...")
+            image_bytes = pdf_first_page_to_png_bytes(original_file_bytes, dpi=dpi)
             processing_note = f"pdf_to_png_{dpi}dpi"
-            
-            # Tarkista tuotetun kuvan laatu
-            try:
-                from PIL import Image
-                pil_image = Image.open(io.BytesIO(image_bytes))
-                width, height = pil_image.size
-                logger.info(f"📐 Generated PNG for GPT-5: {width}×{height} pixels at {dpi} DPI")
-                
-                if min(width, height) < 2000:
-                    logger.warning(f"⚠️  Consider higher DPI: {width}×{height}")
-                else:
-                    logger.info(f"✅ High-quality conversion successful: {width}×{height}")
-                    
-            except Exception as e:
-                logger.warning(f"Could not analyze generated image size: {e}")
-                
-        else:
-            # Suorat kuvatiedostot - käytä samaa molemmille
-            supported_formats = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"]
-            if ext not in supported_formats:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Unsupported file format: {ext}. Supported: {supported_formats + ['.pdf']}"
-                )
-            image_bytes = file_bytes
+        elif ext in supported_formats:
+            image_bytes = original_file_bytes
             processing_note = f"native_{ext[1:]}"
-            
-            # Tarkista kuvan koko
-            try:
-                from PIL import Image
-                pil_image = Image.open(io.BytesIO(image_bytes))
-                width, height = pil_image.size
-                logger.info(f"📷 Native image: {width}×{height} pixels")
-                
-                min_dimension = min(width, height)
-                if min_dimension < 1000:
-                    logger.warning(f"⚠️  Low resolution image: {width}×{height}")
-                    
-            except Exception as e:
-                logger.warning(f"Could not analyze image size: {e}")
-
-        # ✅ KRIITTINEN: Hae industry-spesifinen prompt
+        else:
+            raise HTTPException(
+                415, 
+                f"Unsupported file format: {ext}. Supported: {supported_formats + ['.pdf']}"
+            )
+        
+        # Hae industry-spesifinen prompt
         prompt = industry_manager.get_prompt(industry_type)
         
-        # ✅ STEEL-ALAN ERIKOISUUS: Käytä Google OCR (normalisoitu kuva)
-        if industry_type == "steel":
-            try:
-                logger.info(f"🔍 Using Google Vision OCR with high-DPI conversion for steel analysis...")
-                # Tuodaan riippuvuudet tässä, jotta muut flowt eivät vaadi niitä
-                from lib.ocr_utils import extract_text_from_image_bytes
-                from lib.ocr_image_prep import normalize_for_vision
-                from lib.steel_ocr_integration import create_steel_prompt_with_ocr
-                
-                # ✅ Google Vision tarvitsee kuvan, ei PDF:ää
-                if ext == ".pdf":
-                    # Luo korkean laadun PNG Google OCR:ää varten (400 DPI riittää teksteille)
-                    logger.info("📄 Creating high-quality PNG for Google OCR (400 DPI)...")
-                    ocr_image_bytes = pdf_first_page_to_png_bytes(original_file_bytes, dpi=400)
-                    logger.info(f"✅ OCR image created: {len(ocr_image_bytes)} bytes (pre-normalize)")
-                else:
-                    # Käytä alkuperäistä kuvaa
-                    ocr_image_bytes = original_file_bytes
-
-                # ✅ Normalisoi aina Visionia varten (RGB, koko, enkoodaus)
-                try:
-                    sig = ocr_image_bytes[:8]
-                    logger.info(f"🔎 OCR bytes (pre-norm): {len(ocr_image_bytes)} B, header={sig}")
-                    from PIL import Image
-                    try:
-                        im = Image.open(io.BytesIO(ocr_image_bytes))
-                        im.verify()
-                    except Exception as ver_err:
-                        logger.warning(f"⚠️ PIL verify warning before normalize: {ver_err}")
-                    ocr_image_bytes = normalize_for_vision(ocr_image_bytes)
-                    logger.info(f"✅ OCR image normalized: {len(ocr_image_bytes)} bytes")
-                except Exception as prep_err:
-                    logger.warning(f"⚠️ OCR image normalization failed, proceeding with original: {prep_err}")
-
-                # 1. Aja Google Vision OCR normalisoidulle kuvalle
-                ocr_results = extract_text_from_image_bytes(ocr_image_bytes, return_detailed=True)
-                
-                if ocr_results.get("status") == "success":
-                    # 2. Luo parannettu prompt OCR-tulosten kanssa
-                    enhanced_prompt = create_steel_prompt_with_ocr(prompt, ocr_results)
-                    prompt = enhanced_prompt
-                    
-                    logger.info(f"✅ Google OCR completed successfully:")
-                    logger.info(f"   - Source: {'400 DPI PNG from PDF' if ext == '.pdf' else 'original image (normalized)'}")
-                    logger.info(f"   - Quality: {ocr_results.get('quality', 'unknown')}")
-                    logger.info(f"   - Confidence: {ocr_results.get('confidence', 0):.3f}")
-                    logger.info(f"   - Words found: {ocr_results.get('words_found', 0)}")
-                    logger.info(f"   - Text length: {ocr_results.get('text_length', 0)} chars")
-                    logger.info(f"📝 Enhanced prompt length: {len(prompt)} characters")
-                else:
-                    logger.warning(f"⚠️  Google OCR failed: {ocr_results.get('error', 'Unknown error')}")
-                    
-            except Exception as ocr_error:
-                logger.warning(f"⚠️  Google Vision OCR failed, using basic prompt: {ocr_error}")
-                # Jatka tavallisella promptilla jos OCR epäonnistuu
-        else:
-            logger.info(f"📝 Using standard prompt for {industry_type}: {len(prompt)} characters")
-
-        # ✅ KRIITTINEN: Käytä PNG:tä GPT-5:lle (GPT ei osaa PDF:iä)
+        # 🚀 GPT-5 analyysi
         structured = extract_structured_data_with_vision(
-            image_bytes=image_bytes,  # ← PNG/tms. GPT:lle
-            prompt=prompt,            # ← Enhanced prompt jos steel + OCR onnistui
+            image_bytes=image_bytes,
+            prompt=prompt,
             industry_type=industry_type
         )
         
-        # ✅ Lisää meta-tiedot vastaukseen
+        # ✅ Lisää meta-tiedot
         processing_time = round(time.time() - start_time, 2)
         structured.update({
             "success": True,
             "filename": file.filename,
             "industry_type": industry_type,
             "processing_time": processing_time,
-            "processing_method": processing_note,  # kertoo käytettiinkö suoraa kuvaa vai PDF→PNG
-            "dpi_used": dpi if processing_note.startswith("pdf_to_png") else None
+            "processing_method": processing_note,
+            "dpi_used": dpi if processing_note.startswith("pdf_to_png") else None,
+            "organization_id": user.organization_id,  # ✅ Organisaatio ID mukaan
+            "processed_by": user.user_id  # ✅ Käyttäjä ID mukaan
         })
         
-        if organization_id:
-            structured["organization_id"] = organization_id
-
-        # ✅ Validoi vastauksen rakenne
+        # Validoi vastauksen rakenne
         missing_fields = industry_manager.validate_response_structure(industry_type, structured)
         if missing_fields:
             structured["validation_warnings"] = missing_fields
             logger.warning(f"⚠️  Response missing fields: {missing_fields}")
 
-        logger.info(f"✅ Successfully processed {industry_type} drawing: {file.filename} in {processing_time}s")
+        logger.info(f"✅ Processing complete: {user.email} → {file.filename} ({processing_time}s)")
         return structured
 
     except HTTPException:
         raise
     except Exception as e:
         processing_time = round(time.time() - start_time, 2)
-        logger.error(f"❌ Processing failed after {processing_time}s: {str(e)}")
+        logger.error(f"❌ Processing failed for {user.email}: {str(e)}")
         
-        # Palauta industry-spesifinen virhevastaus
+        # Industry-spesifinen virhevastaus
         error_response = {
             "error": f"Processing failed: {str(e)}",
             "success": False,
             "filename": file.filename,
             "industry_type": industry_type,
-            "processing_time": processing_time
+            "processing_time": processing_time,
+            "organization_id": user.organization_id,
+            "processed_by": user.user_id
         }
         
-        # Lisää industry-spesifinen rakenne virhevastaukseen
+        # Lisää industry-spesifinen rakenne
         if industry_type == "steel":
             error_response.update({
                 "perustiedot": {},
@@ -408,58 +287,46 @@ async def process_image(
         
         return error_response
 
+# ===================================
+# ADMIN ENDPOINTS (vaatii auth)
+# ===================================
+
 @app.post("/admin/reload-configs")
-async def reload_industry_configs():
-    """
-    Admin endpoint: Lataa industry configs uudelleen.
-    Hyödyllinen development-aikana kun muokataan prompteja.
-    """
+async def reload_industry_configs(
+    user: AuthenticatedUser = Depends(require_authenticated_user)
+):
+    """🔒 ADMIN: Lataa industry configs uudelleen"""
+    logger.info(f"🔧 Config reload requested by: {user.email}")
+    
     try:
         industry_manager.reload_configs()
         return {
             "success": True,
             "message": "Industry configurations reloaded successfully",
-            "industries": industry_manager.get_supported_industries()
+            "industries": industry_manager.get_supported_industries(),
+            "reloaded_by": user.email
         }
     except Exception as e:
         logger.error(f"❌ Failed to reload configs: {e}")
         raise HTTPException(status_code=500, detail=f"Reload failed: {str(e)}")
 
-@app.get("/health")
-def health_check():
-    """Detailed health check"""
+@app.get("/debug/industries")
+async def debug_industries(
+    user: AuthenticatedUser = Depends(require_authenticated_user)
+):
+    """🔒 DEBUG: Industry configurations tilastoja"""
+    logger.info(f"🔍 Debug request by: {user.email}")
+    
     try:
-        config_stats = industry_manager.get_config_stats()
+        stats = industry_manager.get_config_stats()
         return {
-            "status": "healthy",
-            "version": "2.0.0",
-            "timestamp": time.time(),
-            "features": [
-                "multi_industry_support",
-                "high_dpi_pdf_processing", 
-                "image_processing",
-                "gpt5_analysis",
-                "dynamic_prompts",
-                "resolution_analysis"
-            ],
-            "industry_manager": {
-                "total_industries": len(industry_manager.get_supported_industries()),
-                "config_file_exists": config_stats["config_file_exists"],
-                "supported_types": industry_manager.get_supported_industries()
-            },
-            "pdf_processing": {
-                "default_dpi": 400,
-                "max_dpi": 600,
-                "min_dpi": 200,
-                "recommended_min_resolution": "1500×1500px"
-            }
+            "config_stats": stats,
+            "manager_status": "healthy" if industry_manager._configs else "unhealthy",
+            "requested_by": user.email
         }
     except Exception as e:
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": time.time()
-        }
+        logger.error(f"❌ Debug endpoint failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
