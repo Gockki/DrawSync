@@ -1,30 +1,50 @@
-// src/components/SteelSummaryPanel.jsx - PÄIVITETTY OSTOLISTA
+// src/components/SteelSummaryPanel.jsx - KORJATTU DYNAAMISET LASKELMAT
 
 import { Calculator, ShoppingCart, AlertTriangle, Download } from 'lucide-react'
+import { useMemo } from 'react'
 
 export default function SteelSummaryPanel({ data }) {
   const materiaalilista = data?.materiaalilista || []
-  const yhteenveto = data?.yhteenveto || {}
   
-  // Laske ostolista 5% hukalla
-  const hukkaProsentti = 5
-  const ostolista = materiaalilista.map(item => {
-    if (!item.yhteispituus_mm) return null
-    
-    const yhteispituusMetria = item.yhteispituus_mm / 1000
-    const hukkaKerroin = 1 + (hukkaProsentti / 100)
-    const ostettavaMetria = yhteispituusMetria * hukkaKerroin
-    
+  // ✅ KORJAUS: Laske yhteenveto dynaamisesti aina materiaalilistan mukaan
+  const dynaamineenYhteenveto = useMemo(() => {
     return {
-      ...item,
-      yhteispituus_metria: yhteispituusMetria,
-      ostettava_metria: ostettavaMetria,
-      hukka_metria: ostettavaMetria - yhteispituusMetria
+      profiilityyppien_lkm: materiaalilista.length,
+      yhteensa_kappaleita: materiaalilista.reduce((sum, item) => sum + (item.kappalemaara || 0), 0),
+      yhteispituus_metria: materiaalilista.reduce((sum, item) => {
+        const yhteispituusMm = item.yhteispituus_mm || 0
+        return sum + (yhteispituusMm / 1000)
+      }, 0)
     }
-  }).filter(Boolean)
+  }, [materiaalilista])
+  
+  // ✅ KORJAUS: Laske ostolista dynaamisesti 5% hukalla
+  const ostolista = useMemo(() => {
+    const hukkaProsentti = 5
+    return materiaalilista.map(item => {
+      if (!item.yhteispituus_mm) return null
+      
+      const yhteispituusMetria = item.yhteispituus_mm / 1000
+      const hukkaKerroin = 1 + (hukkaProsentti / 100)
+      const ostettavaMetria = yhteispituusMetria * hukkaKerroin
+      
+      return {
+        ...item,
+        yhteispituus_metria: yhteispituusMetria,
+        ostettava_metria: ostettavaMetria,
+        hukka_metria: ostettavaMetria - yhteispituusMetria
+      }
+    }).filter(Boolean)
+  }, [materiaalilista])
 
-  const kokonaisOstettava = ostolista.reduce((sum, item) => sum + item.ostettava_metria, 0)
-  const kokonaisHukka = ostolista.reduce((sum, item) => sum + item.hukka_metria, 0)
+  // ✅ KORJAUS: Laske kokonaismäärät dynaamisesti
+  const kokonaisOstettava = useMemo(() => 
+    ostolista.reduce((sum, item) => sum + item.ostettava_metria, 0)
+  , [ostolista])
+  
+  const kokonaisHukka = useMemo(() => 
+    ostolista.reduce((sum, item) => sum + item.hukka_metria, 0)
+  , [ostolista])
 
   const exportData = () => {
     const csvData = [
@@ -59,7 +79,7 @@ export default function SteelSummaryPanel({ data }) {
             <ShoppingCart className="h-5 w-5 text-green-600" />
             Ostolista
             <span className="text-sm font-normal text-gray-600">
-              (+{hukkaProsentti}% hukka)
+              (+5% hukka)
             </span>
           </h2>
           
@@ -85,6 +105,14 @@ export default function SteelSummaryPanel({ data }) {
             <p className="text-gray-600">
               Täydennä materiaalilistan pituustiedot laskeaksesi ostotarpeet
             </p>
+            
+            {/* ✅ LISÄTTY: Näytä materiaalit joilta puuttuu tietoja */}
+            {materiaalilista.length > 0 && (
+              <div className="mt-4 text-sm text-gray-500">
+                Materiaaleja yhteensä: {materiaalilista.length}, 
+                puutteelliset tiedot: {materiaalilista.filter(item => !item.yhteispituus_mm).length}
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -123,60 +151,49 @@ export default function SteelSummaryPanel({ data }) {
               ))}
             </div>
 
-            {/* Yhteenveto */}
+            {/* ✅ KORJAUS: Käytä dynaamisia kokonaismääriä */}
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                 <Calculator className="h-4 w-4" />
-                Ostolistan yhteenveto
+                Ostolistan yhteenveto (päivittyy reaaliajassa)
               </h3>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
                   <span className="text-gray-600">Materiaalit:</span>
                   <div className="font-semibold text-gray-900">
-                    {yhteenveto.profiilityyppien_lkm || 0} tyyppiä
+                    {dynaamineenYhteenveto.profiilityyppien_lkm || 0} tyyppiä
                   </div>
                 </div>
                 <div>
                   <span className="text-gray-600">Kappaleet:</span>
                   <div className="font-semibold text-gray-900">
-                    {yhteenveto.yhteensa_kappaleita || 0} kpl
+                    {dynaamineenYhteenveto.yhteensa_kappaleita || 0} kpl
                   </div>
                 </div>
                 <div>
                   <span className="text-gray-600">Tarvitaan:</span>
-                  <div className="font-semibold text-blue-600">
-                    {(yhteenveto.yhteispituus_metria || 0).toFixed(1)} m
+                  <div className="font-semibold text-green-600">
+                    {dynaamineenYhteenveto.yhteispituus_metria.toFixed(1)} m
                   </div>
                 </div>
                 <div>
                   <span className="text-gray-600">Ostettava:</span>
-                  <div className="font-semibold text-green-600">
+                  <div className="font-semibold text-blue-600">
                     {kokonaisOstettava.toFixed(1)} m
                   </div>
                 </div>
               </div>
               
-              <div className="mt-3 pt-3 border-t border-gray-300">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">
-                    Hukka yhteensä ({hukkaProsentti}%):
-                  </span>
-                  <span className="font-semibold text-orange-600">
+              {/* ✅ LISÄTTY: Ylimääräinen rivi hukalle */}
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Kokonaishukka (+5%):</span>
+                  <div className="font-semibold text-orange-600">
                     {kokonaisHukka.toFixed(1)} m
-                  </span>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            {/* Huomiot */}
-            <div className="mt-4 bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
-              <div className="font-medium mb-1">Huomioitavaa:</div>
-              <ul className="space-y-1 text-xs">
-                <li>• Hukkaprosentti ({hukkaProsentti}%) on arvio normaalista leikkuu- ja valmistushukasta</li>
-                <li>• Tarkista saatavat standardipituudet toimittajalta</li>
-                <li>• Varmista toleranssit ja materiaalimerkinnät</li>
-              </ul>
             </div>
           </>
         )}
