@@ -1,265 +1,186 @@
-import React from 'react';
-import { BarChart3, Package, Weight, Ruler, Activity, Target, Info } from 'lucide-react';
+// src/components/SteelSummaryPanel.jsx - PÄIVITETTY OSTOLISTA
 
-export default function SteelSummaryPanel({ data, materiaalilista, yhteenveto, liitokset }) {
-  if (!materiaalilista || materiaalilista.length === 0) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-3 mb-6">
-          <BarChart3 className="h-6 w-6 text-blue-600" />
-          <h3 className="text-2xl font-bold text-gray-900">Yhteenveto</h3>
-        </div>
-        
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
-          <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600">Ei dataa yhteenvetoa varten</p>
-        </div>
-      </div>
-    );
+import { Calculator, ShoppingCart, AlertTriangle, Download } from 'lucide-react'
+
+export default function SteelSummaryPanel({ data }) {
+  const materiaalilista = data?.materiaalilista || []
+  const yhteenveto = data?.yhteenveto || {}
+  
+  // Laske ostolista 5% hukalla
+  const hukkaProsentti = 5
+  const ostolista = materiaalilista.map(item => {
+    if (!item.yhteispituus_mm) return null
+    
+    const yhteispituusMetria = item.yhteispituus_mm / 1000
+    const hukkaKerroin = 1 + (hukkaProsentti / 100)
+    const ostettavaMetria = yhteispituusMetria * hukkaKerroin
+    
+    return {
+      ...item,
+      yhteispituus_metria: yhteispituusMetria,
+      ostettava_metria: ostettavaMetria,
+      hukka_metria: ostettavaMetria - yhteispituusMetria
+    }
+  }).filter(Boolean)
+
+  const kokonaisOstettava = ostolista.reduce((sum, item) => sum + item.ostettava_metria, 0)
+  const kokonaisHukka = ostolista.reduce((sum, item) => sum + item.hukka_metria, 0)
+
+  const exportData = () => {
+    const csvData = [
+      ['Profiili', 'Kappalemäärä', 'Pituus (mm)', 'Yhteispituus (m)', 'Ostettava (m)', 'Hukka (m)'],
+      ...ostolista.map(item => [
+        item.profiili,
+        item.kappalemaara,
+        item.pituus_mm,
+        item.yhteispituus_metria.toFixed(2),
+        item.ostettava_metria.toFixed(2),
+        item.hukka_metria.toFixed(2)
+      ])
+    ]
+    
+    const csvContent = csvData.map(row => row.join(',')).join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ostolista_${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    
+    URL.revokeObjectURL(url)
   }
 
-  // Lasketut tilastot
-  const stats = {
-    totalWeight: yhteenveto?.kokonaispaino_kg || 0,
-    totalLength: yhteenveto?.kokonaispituus_m || 0,
-    profileTypes: yhteenveto?.profiilityyppien_lkm || 0,
-    uniqueProfiles: yhteenveto?.eri_profiileja || 0,
-    weldingLength: yhteenveto?.hitsisaumojen_pituus_m || 0,
-    averageConfidence: yhteenveto?.keskimääräinen_luottamus || 0,
-    totalItems: materiaalilista.length,
-    weightPerMeter: (yhteenveto?.kokonaispaino_kg || 0) / (yhteenveto?.kokonaispituus_m || 1)
-  };
-
-  // Materiaalijakauma
-  const materialDistribution = materiaalilista?.reduce((acc, material) => {
-    const type = material.profiili?.match(/^([A-Z]+)/)?.[1] || 'OTHER';
-    if (!acc[type]) acc[type] = { count: 0, weight: 0, items: 0 };
-    acc[type].count += material.kappaleet || 0;
-    acc[type].weight += material.kokonaispaino_kg || 0;
-    acc[type].items += 1;
-    return acc;
-  }, {}) || {};
-
-  // Materiaalien järjestys painon mukaan
-  const sortedMaterials = Object.entries(materialDistribution)
-    .sort(([,a], [,b]) => b.weight - a.weight);
-
-  // Varmuustasot
-  const confidenceLevels = {
-    high: materiaalilista.filter(m => (m.luottamus || 0) >= 0.9).length,
-    medium: materiaalilista.filter(m => (m.luottamus || 0) >= 0.7 && (m.luottamus || 0) < 0.9).length,
-    low: materiaalilista.filter(m => (m.luottamus || 0) < 0.7).length
-  };
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3 mb-6">
-        <BarChart3 className="h-6 w-6 text-blue-600" />
-        <h3 className="text-2xl font-bold text-gray-900">Yhteenveto</h3>
-        <span className="bg-blue-100 text-blue-800 text-sm font-medium px-2.5 py-0.5 rounded">
-          {stats.totalItems} nimikettä
-        </span>
-      </div>
-
-      {/* Pääindikaattorit */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Weight className="h-5 w-5 text-blue-600" />
-            <span className="text-sm font-medium text-blue-800">Kokonaispaino</span>
-          </div>
-          <p className="text-3xl font-bold text-blue-900 mb-1">
-            {stats.totalWeight.toFixed(1)} kg
-          </p>
-          <p className="text-sm text-blue-600">
-            {stats.weightPerMeter.toFixed(1)} kg/m
-          </p>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-xl p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Ruler className="h-5 w-5 text-green-600" />
-            <span className="text-sm font-medium text-green-800">Kokonaispituus</span>
-          </div>
-          <p className="text-3xl font-bold text-green-900 mb-1">
-            {stats.totalLength.toFixed(1)} m
-          </p>
-          <p className="text-sm text-green-600">
-            {stats.totalItems} nimikettä
-          </p>
-        </div>
-
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-xl p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Package className="h-5 w-5 text-purple-600" />
-            <span className="text-sm font-medium text-purple-800">Profiilityypit</span>
-          </div>
-          <p className="text-3xl font-bold text-purple-900 mb-1">
-            {stats.profileTypes}
-          </p>
-          <p className="text-sm text-purple-600">
-            {stats.uniqueProfiles} eri profiilia
-          </p>
-        </div>
-
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-xl p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Target className="h-5 w-5 text-orange-600" />
-            <span className="text-sm font-medium text-orange-800">Tunnistusvarmuus</span>
-          </div>
-          <p className="text-3xl font-bold text-orange-900 mb-1">
-            {(stats.averageConfidence * 100).toFixed(0)}%
-          </p>
-          <p className="text-sm text-orange-600">
-            keskimäärin
-          </p>
-        </div>
-      </div>
-
-      {/* Profiilijakauma */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-        <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Activity className="h-5 w-5 text-blue-600" />
-          Profiilijakauma
-        </h4>
-        
-        <div className="space-y-4">
-          {sortedMaterials.map(([type, data]) => {
-            const percentage = (data.weight / stats.totalWeight) * 100;
-            return (
-              <div key={type} className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium text-gray-900">{type}-profiilit</span>
-                  <div className="text-right">
-                    <span className="text-sm font-medium text-gray-700">
-                      {data.weight.toFixed(1)} kg
-                    </span>
-                    <span className="text-xs text-gray-500 ml-2">
-                      ({percentage.toFixed(1)}%)
-                    </span>
-                  </div>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                    style={{ width: `${percentage}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>{data.count} kpl yhteensä</span>
-                  <span>{data.items} nimikettä</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Laatutiedot */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-          <h4 className="font-semibold text-gray-900 mb-4">Tunnistuslaatu</h4>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">Korkea varmuus (≥90%):</span>
-              <span className="font-medium text-green-600">{confidenceLevels.high} kpl</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">Keskiverto (70-89%):</span>
-              <span className="font-medium text-yellow-600">{confidenceLevels.medium} kpl</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">Matala (70%):</span>
-              <span className="font-medium text-red-600">{confidenceLevels.low} kpl</span>
-            </div>
-          </div>
+    <div className="bg-white rounded-xl shadow-lg border border-gray-200">
+      <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-b border-gray-200 p-6 pb-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <ShoppingCart className="h-5 w-5 text-green-600" />
+            Ostolista
+            <span className="text-sm font-normal text-gray-600">
+              (+{hukkaProsentti}% hukka)
+            </span>
+          </h2>
           
-          {confidenceLevels.low > 0 && (
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Info className="h-4 w-4 text-yellow-600" />
-                <span className="text-sm font-medium text-yellow-800">Huomio</span>
-              </div>
-              <p className="text-sm text-yellow-700 mt-1">
-                {confidenceLevels.low} nimikkeellä matala tunnistusvarmuus. Suosittlemme manuaalista tarkistusta.
-              </p>
-            </div>
+          {ostolista.length > 0 && (
+            <button
+              onClick={exportData}
+              className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
+            >
+              <Download className="h-4 w-4" />
+              Lataa CSV
+            </button>
           )}
         </div>
-
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-          <h4 className="font-semibold text-gray-900 mb-4">Rakennetiedot</h4>
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Projektin numero:</span>
-              <span className="font-medium">{data?.perustiedot?.projekti_numero || '-'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Rakenteen nimi:</span>
-              <span className="font-medium">{data?.perustiedot?.rakenteen_nimi || '-'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Materiaaliluokka:</span>
-              <span className="font-medium">{data?.perustiedot?.materiaaliluokka || 'S355'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Mittakaava:</span>
-              <span className="font-medium">{data?.perustiedot?.mittakaava || '-'}</span>
-            </div>
-            {stats.weldingLength > 0 && (
-              <div className="flex justify-between">
-                <span className="text-gray-600">Hitsisaumat:</span>
-                <span className="font-medium">{stats.weldingLength.toFixed(1)} m</span>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
-      {/* Liitokset */}
-      {liitokset && liitokset.length > 0 && (
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-          <h4 className="font-semibold text-gray-900 mb-4">
-            Liitokset ({liitokset.length} kpl)
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {liitokset.map((liitos, index) => (
-              <div key={index} className="border border-gray-200 rounded-lg p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="font-medium text-gray-900 capitalize">{liitos.tyyppi}</span>
-                  <span className="text-sm font-medium text-blue-600">{liitos.määrä} kpl</span>
-                </div>
-                <p className="text-sm text-gray-600 mb-2">{liitos.kuvaus}</p>
-                <div className="text-xs text-gray-500 space-y-1">
-                  {liitos.hitsipituus_mm && (
-                    <div>Hitsipituus: {liitos.hitsipituus_mm} mm</div>
-                  )}
-                  {liitos.pulttikoko && (
-                    <div>Pulttikoko: {liitos.pulttikoko}</div>
-                  )}
-                  {liitos.liitettävät_profiilit && (
-                    <div>Profiilit: {liitos.liitettävät_profiilit.join(', ')}</div>
-                  )}
-                </div>
-              </div>
-            ))}
+      <div className="p-6">
+        {ostolista.length === 0 ? (
+          <div className="text-center py-8">
+            <AlertTriangle className="h-12 w-12 mx-auto mb-3 text-yellow-400" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Ei voida laskea ostolistaa
+            </h3>
+            <p className="text-gray-600">
+              Täydennä materiaalilistan pituustiedot laskeaksesi ostotarpeet
+            </p>
           </div>
-        </div>
-      )}
+        ) : (
+          <>
+            {/* Materiaalit */}
+            <div className="space-y-3 mb-6">
+              {ostolista.map((item, index) => (
+                <div key={index} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-gray-900">{item.profiili}</h3>
+                    <div className="text-sm text-gray-600">
+                      {item.kappalemaara} kpl × {(item.pituus_mm / 1000).toFixed(1)}m
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600">Yhteispituus:</span>
+                      <div className="font-medium text-blue-600">
+                        {item.yhteispituus_metria.toFixed(1)} m
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Ostettava:</span>
+                      <div className="font-medium text-green-600">
+                        {item.ostettava_metria.toFixed(1)} m
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Hukka:</span>
+                      <div className="font-medium text-orange-600">
+                        {item.hukka_metria.toFixed(1)} m
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-      {/* Huomiot */}
-      {data?.huomiot && data.huomiot.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-          <h4 className="font-semibold text-blue-900 mb-4">Analyysitiedot</h4>
-          <div className="space-y-2">
-            {data.huomiot.map((huomio, index) => (
-              <div key={index} className="text-sm text-blue-800">
-                • {huomio}
+            {/* Yhteenveto */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <Calculator className="h-4 w-4" />
+                Ostolistan yhteenveto
+              </h3>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-600">Materiaalit:</span>
+                  <div className="font-semibold text-gray-900">
+                    {yhteenveto.profiilityyppien_lkm || 0} tyyppiä
+                  </div>
+                </div>
+                <div>
+                  <span className="text-gray-600">Kappaleet:</span>
+                  <div className="font-semibold text-gray-900">
+                    {yhteenveto.yhteensa_kappaleita || 0} kpl
+                  </div>
+                </div>
+                <div>
+                  <span className="text-gray-600">Tarvitaan:</span>
+                  <div className="font-semibold text-blue-600">
+                    {(yhteenveto.yhteispituus_metria || 0).toFixed(1)} m
+                  </div>
+                </div>
+                <div>
+                  <span className="text-gray-600">Ostettava:</span>
+                  <div className="font-semibold text-green-600">
+                    {kokonaisOstettava.toFixed(1)} m
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+              
+              <div className="mt-3 pt-3 border-t border-gray-300">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">
+                    Hukka yhteensä ({hukkaProsentti}%):
+                  </span>
+                  <span className="font-semibold text-orange-600">
+                    {kokonaisHukka.toFixed(1)} m
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Huomiot */}
+            <div className="mt-4 bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
+              <div className="font-medium mb-1">Huomioitavaa:</div>
+              <ul className="space-y-1 text-xs">
+                <li>• Hukkaprosentti ({hukkaProsentti}%) on arvio normaalista leikkuu- ja valmistushukasta</li>
+                <li>• Tarkista saatavat standardipituudet toimittajalta</li>
+                <li>• Varmista toleranssit ja materiaalimerkinnät</li>
+              </ul>
+            </div>
+          </>
+        )}
+      </div>
     </div>
-  );
+  )
 }

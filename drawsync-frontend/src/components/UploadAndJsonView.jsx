@@ -226,7 +226,7 @@ const handleUpload = async () => {
   try {
     await new Promise(requestAnimationFrame)
     
-    // ✅ KÄYTÄ AUTHENTICATED API CLIENTIA
+    // ✅ KÄYTÄ KORJATTUA API CLIENTIA
     const json = await apiClient.post('/process', form)
     
     if (json.success) {
@@ -240,13 +240,16 @@ const handleUpload = async () => {
   } catch (err) {
     console.error('Upload error:', err)
     
-    // ✅ PAREMPI VIRHEENKÄSITTELY
+    // ✅ PAREMPI VIRHEENKÄSITTELY JWT:lle
     if (err.message.includes('Not authenticated')) {
-      alert('Kirjaudu sisään jatkaaksesi')
-      // Ohjaa login sivulle tai päivitä auth
-      window.location.reload()
-    } else if (err.message.includes('403')) {
+      alert('Kirjautumisesi on vanhentunut. Kirjaudu uudelleen.')
+      // Ohjaa login sivulle
+      navigate('/login')
+    } else if (err.message.includes('Access denied')) {
       alert('Ei käyttöoikeutta organisaatioon')
+    } else if (err.message.includes('401')) {
+      alert('Autentikointi epäonnistui. Kirjaudu uudelleen.')
+      navigate('/login')
     } else {
       alert(`Virhe analysoinnissa: ${err.message}`)
     }

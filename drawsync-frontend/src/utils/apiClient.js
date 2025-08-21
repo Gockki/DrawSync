@@ -1,75 +1,116 @@
+// src/utils/apiClient.js - KORJATTU JWT AUTH
 import { supabase } from '../supabaseClient'
 
-/**
- * Authenticated API client joka lisää automaattisesti JWT tokenin
- */
 class ApiClient {
-  constructor(baseURL = 'http://localhost:8000') {
-    this.baseURL = baseURL
+  constructor() {
+    this.baseUrl = 'http://localhost:8000'
   }
 
+  // ✅ Helper: Hae JWT token Supabase sessiosta
   async getAuthHeaders() {
     const { data: { session } } = await supabase.auth.getSession()
-
-    console.log('🔍 Debug session:', session ? 'Found' : 'Not found')
-    console.log('🔍 Access token exists:', !!session?.access_token)
     
     if (!session?.access_token) {
-        console.error('❌ No access token in session')
       throw new Error('Not authenticated')
     }
 
-    // Debug token
-  console.log('🔍 Token preview:', session.access_token.substring(0, 50) + '...')
-  console.log('🔍 User ID:', session.user?.id)
-  console.log('🔍 Email:', session.user?.email)
-
     return {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json'
+      'Authorization': `Bearer ${session.access_token}`
     }
   }
 
-  async post(endpoint, data, options = {}) {
-    const headers = await this.getAuthHeaders()
-    
-    // Jos FormData (file upload), poista Content-Type antaen browserin asettaa sen
-    if (data instanceof FormData) {
-      delete headers['Content-Type']
+  // ✅ POST method for FormData (kuten /process endpoint)
+  async post(endpoint, formData) {
+    try {
+      const headers = await this.getAuthHeaders()
+      
+      console.log('🔑 Making authenticated request:', {
+        endpoint,
+        hasToken: !!headers.Authorization,
+        tokenPreview: headers.Authorization?.substring(0, 20) + '...'
+      })
+
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers,
+        body: formData
+      })
+
+      console.log('📡 API Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ API Error response:', errorText)
+        
+        if (response.status === 401) {
+          throw new Error('Not authenticated')
+        } else if (response.status === 403) {
+          throw new Error('Access denied')
+        } else {
+          throw new Error(`API Error ${response.status}: ${errorText}`)
+        }
+      }
+
+      return response.json()
+    } catch (error) {
+      console.error('🚨 ApiClient.post error:', error)
+      throw error
     }
-
-    const response = await fetch(`${this.baseURL}${endpoint}`, {
-      method: 'POST',
-      headers: { ...headers, ...options.headers },
-      body: data instanceof FormData ? data : JSON.stringify(data),
-      ...options
-    })
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Network error' }))
-      throw new Error(error.error || `HTTP ${response.status}`)
-    }
-
-    return response.json()
   }
 
-  async get(endpoint, options = {}) {
-    const headers = await this.getAuthHeaders()
+  // ✅ GET method
+  async get(endpoint) {
+    try {
+      const headers = await this.getAuthHeaders()
 
-    const response = await fetch(`${this.baseURL}${endpoint}`, {
-      method: 'GET',
-      headers: { ...headers, ...options.headers },
-      ...options
-    })
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'GET',
+        headers
+      })
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Network error' }))
-      throw new Error(error.error || `HTTP ${response.status}`)
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`API Error ${response.status}: ${errorText}`)
+      }
+
+      return response.json()
+    } catch (error) {
+      console.error('🚨 ApiClient.get error:', error)
+      throw error
     }
+  }
 
-    return response.json()
+  // ✅ JSON POST method
+  async postJson(endpoint, data) {
+    try {
+      const headers = await this.getAuthHeaders()
+      headers['Content-Type'] = 'application/json'
+
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(data)
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`API Error ${response.status}: ${errorText}`)
+      }
+
+      return response.json()
+    } catch (error) {
+      console.error('🚨 ApiClient.postJson error:', error)
+      throw error
+    }
   }
 }
 
-// Singleton instance
+// ✅ Export singleton instance
 export const apiClient = new ApiClient()
+
+// ✅ Legacy compatibility
+export default apiClient
