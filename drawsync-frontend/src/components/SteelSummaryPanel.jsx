@@ -6,7 +6,7 @@ import { useMemo } from 'react'
 export default function SteelSummaryPanel({ data }) {
   const materiaalilista = data?.materiaalilista || []
   
-  // ✅ KORJAUS: Laske yhteenveto dynaamisesti aina materiaalilistan mukaan
+  // Laske yhteenveto dynaamisesti aina materiaalilistan mukaan
   const dynaamineenYhteenveto = useMemo(() => {
     return {
       profiilityyppien_lkm: materiaalilista.length,
@@ -18,7 +18,7 @@ export default function SteelSummaryPanel({ data }) {
     }
   }, [materiaalilista])
   
-  // ✅ KORJAUS: Laske ostolista dynaamisesti 5% hukalla
+  //Laske ostolista dynaamisesti 5% hukalla
   const ostolista = useMemo(() => {
     const hukkaProsentti = 5
     return materiaalilista.map(item => {
@@ -37,7 +37,7 @@ export default function SteelSummaryPanel({ data }) {
     }).filter(Boolean)
   }, [materiaalilista])
 
-  // ✅ KORJAUS: Laske kokonaismäärät dynaamisesti
+  //Laske kokonaismäärät dynaamisesti
   const kokonaisOstettava = useMemo(() => 
     ostolista.reduce((sum, item) => sum + item.ostettava_metria, 0)
   , [ostolista])
@@ -106,7 +106,7 @@ export default function SteelSummaryPanel({ data }) {
               Täydennä materiaalilistan pituustiedot laskeaksesi ostotarpeet
             </p>
             
-            {/* ✅ LISÄTTY: Näytä materiaalit joilta puuttuu tietoja */}
+            {/*  LISÄTTY: Näytä materiaalit joilta puuttuu tietoja */}
             {materiaalilista.length > 0 && (
               <div className="mt-4 text-sm text-gray-500">
                 Materiaaleja yhteensä: {materiaalilista.length}, 
@@ -151,7 +151,7 @@ export default function SteelSummaryPanel({ data }) {
               ))}
             </div>
 
-            {/* ✅ KORJAUS: Käytä dynaamisia kokonaismääriä */}
+            {/*  KORJAUS: Käytä dynaamisia kokonaismääriä */}
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                 <Calculator className="h-4 w-4" />
@@ -185,7 +185,7 @@ export default function SteelSummaryPanel({ data }) {
                 </div>
               </div>
               
-              {/* ✅ LISÄTTY: Ylimääräinen rivi hukalle */}
+              {/*  LISÄTTY: Ylimääräinen rivi hukalle */}
               <div className="mt-3 pt-3 border-t border-gray-200">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Kokonaishukka (+5%):</span>

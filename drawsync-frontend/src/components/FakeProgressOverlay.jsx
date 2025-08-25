@@ -72,7 +72,7 @@ useEffect(() => {
     return;
   }
 
-  // ✅ TÄMÄ ON RATKAISU:
+  
   // Aloita uusi animaatio VAIN jos overlay ei ole vielä visible
   // TAI jos ollaan sulkemassa ja avaamassa uudelleen
   if (!visible) {

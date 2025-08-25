@@ -64,6 +64,7 @@ export default function UploadAndJsonView() {
   const [manualSurfaceArea, setManualSurfaceArea] = useState('')
   const [showManualInput, setShowManualInput] = useState(false)
   const [fakeDone, setFakeDone] = useState(false)
+  const [fileType, setFileType] = useState(null)
 
   // Service selections (coating-spesifiset)
   const [selectedCoating, setSelectedCoating] = useState('')
@@ -207,10 +208,16 @@ useEffect(() => {
     }
   }
 
-  const handleFileSelect = (file, url) => {
-    setFile(file)
-    setPreviewUrl(url)
-  }
+  const handleFileSelect = (selectedFile, url) => {
+  setFile(selectedFile) // KORJATTU: oli selectedFilefile
+  setPreviewUrl(url)
+
+  const detectedFileType = selectedFile.type.startsWith('image/') ? 'image' : 
+                          selectedFile.type === 'application/pdf' ? 'pdf' : 'unknown'
+  setFileType(detectedFileType)
+}
+
+  
 
 const handleUpload = async () => {
   if (!file || !organization) return
@@ -371,33 +378,38 @@ if (success) {
       // ✅ INDUSTRY-SPESIFINEN TALLENNUS
       let drawingData
       
-      if (organization.industry_type === 'steel') {
-        // UUSI: Steel-spesifinen tallennus
-        drawingData = {
-          filename: file.name,
-          image_url: urlData.publicUrl,
-          product_code: editedData.projekti_numero || data.perustiedot?.projekti_numero || null,
-          product_name: editedData.rakenteen_nimi || data.perustiedot?.rakenteen_nimi || null,
-          material: editedData.materiaaliluokka || data.perustiedot?.materiaaliluokka || null,
-          weight_kg: data.yhteenveto?.kokonaispaino_kg || null,
-          surface_area_cm2: null, // Steel ei käytä pinta-alaa
-          ocr_data: data.processing_info || {},
-          gpt_analysis: data
-        }
-      } else {
-        // VANHA: Coating-tallennus säilyy täsmälleen samana!
-        drawingData = {
-          filename: file.name,
-          image_url: urlData.publicUrl,
-          product_code: editedData.tuotekoodi || data.perustiedot?.tuotekoodi || null,
-          product_name: editedData.tuotenimi || data.perustiedot?.tuotenimi || null,
-          material: editedData.materiaali || data.perustiedot?.materiaali || null,
-          weight_kg: parseFloat(editedData.paino_kg || data.perustiedot?.paino_kg) || null,
-          surface_area_cm2: data.pinta_ala_analyysi?.pinta_ala_cm2 || null,
-          ocr_data: data.processing_info || {},
-          gpt_analysis: data
-        }
-      }
+if (organization.industry_type === 'steel') {
+  drawingData = {
+    filename: file.name,
+    image_url: urlData.publicUrl,
+    product_code: editedData.projekti_numero || data.perustiedot?.projekti_numero || null,
+    product_name: editedData.rakenteen_nimi || data.perustiedot?.rakenteen_nimi || null,
+    material: editedData.materiaaliluokka || data.perustiedot?.materiaaliluokka || null,
+    
+    // KORJAUS: Steel ei käytä painoja - aseta null
+    weight_kg: null,
+    
+    // KORJAUS: Steel ei käytä pinta-alaa - aseta null  
+    surface_area_cm2: null,
+    
+    // Säilytetään olemassa olevat sarakkeet
+    ocr_data: data.processing_info || {},
+    gpt_analysis: data // Tämä sisältää kaiken steel-spesifisen datan
+  }
+} else {
+  // Coating-tallennus säilyy täsmälleen samana
+  drawingData = {
+    filename: file.name,
+    image_url: urlData.publicUrl,
+    product_code: editedData.tuotekoodi || data.perustiedot?.tuotekoodi || null,
+    product_name: editedData.tuotenimi || data.perustiedot?.tuotenimi || null,
+    material: editedData.materiaali || data.perustiedot?.materiaali || null,
+    weight_kg: parseFloat(editedData.paino_kg || data.perustiedot?.paino_kg) || null,
+    surface_area_cm2: data.pinta_ala_analyysi?.pinta_ala_cm2 || null,
+    ocr_data: data.processing_info || {},
+    gpt_analysis: data
+  }
+}
       
       const saved = await db.saveDrawing(organization.id, user.id, drawingData)
       
@@ -412,7 +424,7 @@ if (success) {
     }
   }
 
-  // ✅ Dynamic tab definitions based on industry
+  //  Dynamic tab definitions based on industry
   const tabs = industryConfig.tabs.map(tab => ({
     ...tab,
     icon: getTabIcon(tab.id),
@@ -436,13 +448,13 @@ if (success) {
     return icons[tabId] || Package
   }
 
-  // ✅ KORJATTU: Helper function to check if tab is enabled
+  //  KORJATTU: Helper function to check if tab is enabled
   function getTabEnabled(tabId) {
     switch (tabId) {
       case 'perustiedot':
         return !!data
       
-      // ✅ COATING-TABIT: Toimivat kun EI ole steel/machining
+      //  COATING-TABIT: Toimivat kun EI ole steel/machining
       case 'mitat':
         return !!data?.mitat && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining'
       case 'pinta-ala':
@@ -452,7 +464,7 @@ if (success) {
       case 'hinnoittelu':
         return !!pricing && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining'
       
-      // ✅ STEEL-TABIT: Vain steel-organisaatioissa  
+      //  STEEL-TABIT: Vain steel-organisaatioissa  
       case 'materiaalilista':
         return !!data?.materiaalilista && organization?.industry_type === 'steel'
       case 'tarkistettavaa':
@@ -460,7 +472,7 @@ if (success) {
       case 'ostolista':
         return !!data?.materiaalilista && organization?.industry_type === 'steel'
       
-      // ✅ MACHINING-TABIT
+      //  MACHINING-TABIT
       case 'toleranssit':
         return !!data?.toleranssit && organization?.industry_type === 'machining'
       case 'operaatiot':
@@ -484,6 +496,7 @@ if (success) {
           <UploadSection
             file={file}
             previewUrl={previewUrl}
+            fileType={fileType}
             loading={loading}
             onDrop={handleDrop}
             onFileSelect={handleFileSelect}
@@ -508,7 +521,7 @@ if (success) {
                 onChange={setActiveTab}
               />
 
-              {/* ✅ KORJATTU: INDUSTRY-SPESIFISET PANEELIT */}
+              {/*  KORJATTU: INDUSTRY-SPESIFISET PANEELIT */}
               
               {/* PERUSTIEDOT - Industry-spesifinen */}
               {activeTab === 'perustiedot' && (
@@ -527,7 +540,7 @@ if (success) {
                 )
               )}
 
-              {/* ✅ COATING-TABIT - Korjattu: Renderöidään kun EI ole steel/machining */}
+              {/*  COATING-TABIT - Korjattu: Renderöidään kun EI ole steel/machining */}
               {activeTab === 'mitat' && organization?.industry_type !== 'steel' && organization?.industry_type !== 'machining' && (
                 <MitatPanel mitat={data.mitat} />
               )}
@@ -563,7 +576,7 @@ if (success) {
                 />
               )}
 
-              {/* ✅ STEEL-TABIT - Vain steel-organisaatioissa */}
+              {/*  STEEL-TABIT - Vain steel-organisaatioissa */}
               {activeTab === 'materiaalilista' && organization?.industry_type === 'steel' && (
                 <SteelMaterialListPanel
                   data={data}
@@ -589,7 +602,7 @@ if (success) {
                 />
               )}
 
-              {/* ✅ MACHINING-TABIT - Tulevaisuudessa */}
+              {/*  MACHINING-TABIT - Tulevaisuudessa */}
               {activeTab === 'toleranssit' && organization?.industry_type === 'machining' && (
                 <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 text-center">
                   <h3 className="text-lg font-semibold text-gray-700 mb-3">Toleranssi-analyysi</h3>
@@ -635,13 +648,13 @@ if (success) {
               <img src={aiEmpty} alt="AI Analysis" className="w-24 h-24 mx-auto mb-6 opacity-50" />
               <h3 className="text-xl font-semibold text-gray-700 mb-3">
                 {organization?.industry_type === 'steel' ? 'Teräsrakenne-analyysi' : 
-                 organization?.industry_type === 'machining' ? 'Koneistusanalyysi' :
-                 'Pinnoitusanalyysi'}
+                organization?.industry_type === 'machining' ? 'Koneistusanalyysi' :
+                'Pinnoitusanalyysi'}
               </h3>
               <p className="text-gray-500 max-w-md mx-auto">
                 {organization?.industry_type === 'steel' ? 
                   'Lataa teräsrakennepiirustus analysoidaksesi materiaalilistan ja laskettava ostotarpeita.' :
-                 organization?.industry_type === 'machining' ?
+                organization?.industry_type === 'machining' ?
                   'Lataa koneistuspiirustus analysoidaksesi toleranssit ja työoperaatiot.' :
                   'Lataa pinnoitettavan tuotteen piirustus saadaksesi tarkan pinta-ala-analyysin ja hintatarjouksen.'}
               </p>

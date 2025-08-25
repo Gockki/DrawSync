@@ -21,10 +21,10 @@ export default function Join() {
   })
 
   useEffect(() => {
-  console.log('🎯 URL search params:', searchParams.toString())
-  console.log('🎯 Token from URL:', token)
-  console.log('🎯 Token type:', typeof token)
-  console.log('🎯 Token length:', token?.length)
+  console.log(' URL search params:', searchParams.toString())
+  console.log(' Token from URL:', token)
+  console.log(' Token type:', typeof token)
+  console.log(' Token length:', token?.length)
     if (!token) {
       setError('Invalid invitation link')
       setLoading(false)
@@ -81,9 +81,9 @@ export default function Join() {
   const user = authData.user
   if (!user) throw new Error('Registration failed')
 
-  console.log('✅ User registered:', user.id)
+  console.log(' User registered:', user.id)
 
-  // ✅ Sign in immediately after registration
+  // Sign in immediately after registration
   const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
     email: formData.email,
     password: formData.password
@@ -91,7 +91,7 @@ export default function Join() {
 
   if (signInError) throw signInError
 
-  console.log('✅ User signed in:', signInData.user.id)
+  console.log(' User signed in:', signInData.user.id)
 
   // 2. Accept invitation
   await db.acceptInvitation(token, user.id)
