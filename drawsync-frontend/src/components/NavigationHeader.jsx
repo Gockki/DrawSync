@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useOrganization } from '../contexts/OrganizationContext'
 import { getIndustryConfig } from '../utils/aiPrompts'
-import mantoxLogo from '../assets/mantox-logo.png'
+import mantoxLogo from '../assets/Wisuron logo.svg'
 import { getSubdomain } from '../utils/subdomain'
 import { 
   Upload, 
@@ -83,7 +83,7 @@ export default function NavigationHeader() {
           {/* Logo ja brändi */}
           <div className="flex items-center gap-4">
             {/* varaa logolle kiinteä leveys */}
-            <div className="relative h-12 w-[160px] overflow-visible shrink-0">
+            <div className="relative h-5 w-[160px] overflow-visible shrink-0">
               <img
                 src={mantoxLogo}
                 alt="Mantox Solutions"

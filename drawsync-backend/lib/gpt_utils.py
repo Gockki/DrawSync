@@ -23,7 +23,7 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5")
 
 def extract_structured_data_with_vision(
     image_bytes: bytes, 
-    prompt: str,  # ← Prompt tulee parametrina (ei kovakoodattuna)
+    prompt: str,  # ← Prompt tulee parametrina 
     industry_type: str = "coating"
 ) -> dict:
     """
@@ -40,14 +40,14 @@ def extract_structured_data_with_vision(
     start_time = time.time()
     
     try:
-        logger.info(f"🤖 Processing {industry_type} image with {OPENAI_MODEL}")
-        logger.info(f"📝 Prompt length: {len(prompt)} characters")
-        logger.info(f"📊 Image size: {len(image_bytes)} bytes")
+        logger.info(f" Processing {industry_type} image with {OPENAI_MODEL}")
+        logger.info(f" Prompt length: {len(prompt)} characters")
+        logger.info(f" Image size: {len(image_bytes)} bytes")
         
         # Encode image to base64
         image_base64 = base64.b64encode(image_bytes).decode("utf-8")
 
-        # ✅ GPT-5 API kutsu - toimii kuville
+        #  GPT-5 API kutsu - toimii kuville
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
             response_format={"type": "json_object"},
@@ -64,13 +64,13 @@ def extract_structured_data_with_vision(
         )
 
         raw_content = response.choices[0].message.content
-        logger.info(f"📊 GPT response length: {len(raw_content)} characters")
+        logger.info(f" GPT response length: {len(raw_content)} characters")
         
         # Parse JSON response
         try:
             data = json.loads(raw_content)
         except json.JSONDecodeError as e:
-            logger.error(f"❌ JSON parse error: {e}")
+            logger.error(f" JSON parse error: {e}")
             logger.error(f"Raw response preview: {raw_content[:500]}...")
             raise ValueError(f"Invalid JSON response from GPT: {e}")
 
@@ -88,12 +88,12 @@ def extract_structured_data_with_vision(
         # Industry-specific validation and enhancement
         enhanced_data = validate_and_enhance_result(data, industry_type)
         
-        logger.info(f"✅ Successfully processed {industry_type} drawing in {processing_time}s")
+        logger.info(f" Successfully processed {industry_type} drawing in {processing_time}s")
         return enhanced_data
 
     except Exception as e:
         processing_time = round(time.time() - start_time, 2)
-        logger.error(f"❌ Vision processing failed after {processing_time}s: {str(e)}")
+        logger.error(f" Vision processing failed after {processing_time}s: {str(e)}")
         
         # Return industry-appropriate error structure
         return create_error_response(industry_type, str(e), processing_time)
@@ -121,11 +121,11 @@ def validate_and_enhance_result(data: dict, industry_type: str) -> dict:
         elif industry_type == "machining":
             return validate_and_enhance_machining_result(data)
         else:
-            logger.warning(f"⚠️  Unknown industry type: {industry_type}, using coating validation")
+            logger.warning(f"  Unknown industry type: {industry_type}, using coating validation")
             return validate_and_enhance_coating_result(data)
             
     except Exception as e:
-        logger.error(f"❌ Validation failed for {industry_type}: {e}")
+        logger.error(f" Validation failed for {industry_type}: {e}")
         # Return original data with warning
         data["validation_error"] = str(e)
         return data
@@ -154,7 +154,7 @@ def validate_and_enhance_coating_result(data: dict) -> dict:
     gpt_surface_area = data["pinta_ala_analyysi"].get("pinta_ala_cm2")
     
     if gpt_surface_area and gpt_surface_area > 0:
-        logger.info(f"📐 Using GPT calculated surface area: {gpt_surface_area} cm²")
+        logger.info(f" Using GPT calculated surface area: {gpt_surface_area} cm²")
         data["pinta_ala_analyysi"]["method"] = "gpt_vision_analysis"
         
         # Python backup calculation
@@ -333,12 +333,12 @@ def calculate_python_surface_area(data):
                     holes_cm2 += hole_area * hole["määrä"]
             
             net_cm2 = max(gross_cm2 - holes_cm2, 0)
-            logger.info(f"🧮 Python calculated: gross={gross_cm2:.1f}cm², holes={holes_cm2:.1f}cm², net={net_cm2:.1f}cm²")
+            logger.info(f" Python calculated: gross={gross_cm2:.1f}cm², holes={holes_cm2:.1f}cm², net={net_cm2:.1f}cm²")
             return round(net_cm2, 1)
         
         return None
     except Exception as e:
-        logger.warning(f"⚠️  Python surface area calculation failed: {e}")
+        logger.warning(f"  Python surface area calculation failed: {e}")
         return None
 
 # Backward compatibility exports

@@ -66,7 +66,7 @@ useEffect(() => {
   cancelAnimationFrame(rafRef.current);
 
   if (!open) {
-    console.log('❌ Not open, hiding overlay')
+    
     setVisible(false);
     setProgress(0);
     return;
@@ -76,13 +76,13 @@ useEffect(() => {
   // Aloita uusi animaatio VAIN jos overlay ei ole vielä visible
   // TAI jos ollaan sulkemassa ja avaamassa uudelleen
   if (!visible) {
-    console.log('✅ Starting NEW progress animation (overlay was not visible)')
+
     setVisible(true);
     setProgress(0);
     startRef.current = performance.now();
     finishingRef.current = false;
   } else {
-    console.log('🔄 Overlay already visible, continuing existing animation')
+
   }
 
   const maxHold = (planRef.current.at(-1)?.to ?? 0.93) * 100;

@@ -23,6 +23,7 @@ from lib.ocr_image_prep import normalize_for_vision
 from lib.ocr_utils import extract_text_from_image_bytes
 from lib.gpt_utils import extract_structured_data_with_vision
 from lib.steel_ocr_integration import create_steel_prompt_with_ocr
+from lib.industry_config import get_prompt
 
 router = APIRouter(prefix="", tags=["process"])
 log = logging.getLogger("process")
