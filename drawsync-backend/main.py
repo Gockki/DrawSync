@@ -25,22 +25,27 @@ ALLOWED_ORIGINS = [
     if o.strip()
 ]
 
+# Salli Vercel-previewt (tai aseta tämä Railwayn ENViin). Jos asetat ENViin, tämä arvo yliajetaan.
 ALLOWED_ORIGIN_REGEX = os.getenv(
     "ALLOWED_ORIGIN_REGEX",
-    r"^https?://([a-z0-9-]+\.)*pic2data\.local(?::\d+)?$"
+    r"^https://.*\.vercel\.app$|^https?://([a-z0-9-]+\.)*pic2data\.local(?::\d+)?$"
 )
+
+# Debug-startuplogi (näkyy Railwayn lokeissa)
+print("[CORS] ALLOWED_ORIGINS =", ALLOWED_ORIGINS)
+print("[CORS] ALLOWED_ORIGIN_REGEX =", ALLOWED_ORIGIN_REGEX)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX or None,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=[
-        "Authorization",
-        "Content-Type",
-        "X-Org-Slug",
-    ],
+    # Preflightissa selain saattaa pyytää mm. authorization, content-type, x-client-info, baggage, x-sentry-trace, jne.
+    # Pilotissa turvallisin on sallia kaikki custom-headerit:
+    allow_headers=["*"],
+    # (valinnainen) näytä nämä selaimelle vastauksissa:
+    expose_headers=["X-Request-ID"],
 )
 
 # ---------------------------
