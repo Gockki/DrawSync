@@ -17,8 +17,8 @@ function joinUrl(base, path) {
 function detectBaseUrl() {
   // 1) Vite/Vercel env (PROD/preview)
   const fromEnv =
-    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
-    (typeof process !== 'undefined' && process.env?.VITE_API_URL)
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
+    (typeof process !== 'undefined' && process.env?.VITE_API_BASE_URL)
   if (fromEnv) return fromEnv
 
   // 2) Dev fallback: jos frontti pyörii Viten portissa 5173 → api oletetaan 8000
