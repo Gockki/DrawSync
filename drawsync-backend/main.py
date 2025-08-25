@@ -1,11 +1,46 @@
 from __future__ import annotations
 import os
+import json
 import pkgutil
 import importlib
 from typing import Any
 
 from dotenv import load_dotenv
 load_dotenv()  # <-- lataa .env paikallisesti
+
+# ---------------------------
+# Google Cloud Credentials Setup for Railway
+# ---------------------------
+def setup_google_cloud_credentials():
+    """Setup Google Cloud credentials for Railway deployment"""
+    gcp_creds_json = os.getenv("GOOGLE_CLOUD_CREDENTIALS")
+    
+    if gcp_creds_json:
+        try:
+            # Validate JSON format
+            json.loads(gcp_creds_json)
+            
+            # Write to /tmp/gcp_key.json
+            with open("/tmp/gcp_key.json", "w") as f:
+                f.write(gcp_creds_json)
+            
+            # Set environment variable to point to the file
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/gcp_key.json"
+            print("[STARTUP] Google Cloud credentials configured from environment")
+            
+        except json.JSONDecodeError as e:
+            print(f"[STARTUP] Invalid GOOGLE_CLOUD_CREDENTIALS JSON: {e}")
+        except Exception as e:
+            print(f"[STARTUP] Failed to setup Google Cloud credentials: {e}")
+    else:
+        print("[STARTUP] GOOGLE_CLOUD_CREDENTIALS not found in environment")
+        # Fallback to local file for development
+        if os.path.exists("creds/gcp_key.json"):
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "creds/gcp_key.json"
+            print("[STARTUP] Using local credentials file: creds/gcp_key.json")
+
+# Setup credentials before importing any Google Cloud libraries
+setup_google_cloud_credentials()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,6 +59,14 @@ ALLOWED_ORIGINS = [
     for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
     if o.strip()
 ]
+
+ALLOWED_ORIGIN_REGEX = os.getenv(
+    "ALLOWED_ORIGIN_REGEX",
+    r"^https?://([a-z0-9-]+\.)*pic2data\.local(?::\d+)?$"
+)
+
+print(f"[CORS] ALLOWED_ORIGINS = {ALLOWED_ORIGINS}")
+print(f"[CORS] ALLOWED_ORIGIN_REGEX = {ALLOWED_ORIGIN_REGEX}")
 
 # Salli Vercel-previewt (tai aseta tämä Railwayn ENViin). Jos asetat ENViin, tämä arvo yliajetaan.
 ALLOWED_ORIGIN_REGEX = os.getenv(
@@ -78,6 +121,18 @@ _include_all_routers(app)
 @app.get("/health")
 def health() -> dict:
     return {"ok": True}
+
+# ---------------------------
+# Startup Event
+# ---------------------------
+@app.on_event("startup")
+async def startup_event():
+    """Log startup information"""
+    gcp_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if gcp_path and os.path.exists(gcp_path):
+        print(f"[STARTUP] Google Cloud credentials ready: {gcp_path}")
+    else:
+        print(f"[STARTUP] Google Cloud credentials issue: {gcp_path}")
 
 # ---------------------------
 # Paikalliskäynnistys
