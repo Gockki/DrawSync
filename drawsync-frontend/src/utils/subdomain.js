@@ -19,13 +19,28 @@ export const getSubdomain = (hostname) => {
   
   // ✅ HOSTING PATTERNS - dynaamiset domainit
   
-  // Vercel deployment: app.vercel.app, mantox-app.vercel.app 
+  // Vercel deployment patterns
   if (cleanHost.includes('.vercel.app')) {
     const parts = cleanHost.split('.')
     if (parts.length >= 3) {
-      // mantox-app.vercel.app → mantox
+      // Special mappings for current Vercel deployment
+      const urlMap = {
+        'draw-sync-nu': 'mantox',  // Current deployment → Mantox
+        'mantox-drawsync': 'mantox',
+        'terstesti-drawsync': 'terstesti-oy',
+        'testiyritys-drawsync': 'testi-yritys-oy',
+        'admin-drawsync': 'admin'
+      }
+      
+      const vercelName = parts[0]
+      if (urlMap[vercelName]) {
+        console.log('📍 Vercel mapped subdomain:', urlMap[vercelName])
+        return urlMap[vercelName]
+      }
+      
+      // Fallback: first part before dash
       const subdomain = parts[0].split('-')[0]
-      console.log('📍 Vercel subdomain:', subdomain)
+      console.log('📍 Vercel fallback subdomain:', subdomain)
       return subdomain
     }
   }
@@ -41,7 +56,6 @@ export const getSubdomain = (hostname) => {
   }
   
   // ✅ CUSTOM DOMAIN SUPPORT (kun domain tulee)
-  // app.yourdomain.com, mantox.yourdomain.com
   const parts = cleanHost.split('.')
   if (parts.length >= 3) {
     // Exclude common prefixes
@@ -49,16 +63,6 @@ export const getSubdomain = (hostname) => {
     if (!['www', 'api', 'mail', 'ftp', 'admin'].includes(subdomain)) {
       console.log('📍 Custom domain subdomain:', subdomain)
       return subdomain
-    }
-  }
-  
-  // ✅ SPECIFIC DOMAIN SUPPORT (backward compatibility)
-  if (cleanHost.includes('pic2data')) {
-    const parts = cleanHost.split('.')
-    if (parts.length >= 3) {
-      const subdomain = parts[0]
-      console.log('📍 Pic2data subdomain:', subdomain)
-      return subdomain === 'pic2data' ? null : subdomain
     }
   }
   
