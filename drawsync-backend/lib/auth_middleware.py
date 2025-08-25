@@ -1,227 +1,137 @@
-# lib/auth_middleware.py - YKSINKERTAISEMPI ES256 KORJAUS
-
+from __future__ import annotations
 import os
-import jwt
-import httpx
-import logging
-import requests
-from typing import Optional, Dict, Any
-from fastapi import HTTPException, Depends
+from dataclasses import dataclass
+from typing import Optional
+
+from fastapi import HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from functools import lru_cache
 
-logger = logging.getLogger(__name__)
+import jwt
+from jwt import PyJWKClient, InvalidTokenError
 
-# Supabase konfiguraatio
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")  
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+security = HTTPBearer(auto_error=True)
 
-logger.info(f"SUPABASE_URL: {SUPABASE_URL}")
-logger.info(f"SUPABASE_JWT_SECRET: {'SET' if SUPABASE_JWT_SECRET else 'NOT SET'}")
-logger.info(f"SUPABASE_ANON_KEY: {'SET' if SUPABASE_ANON_KEY else 'NOT SET'}")
-
-if not SUPABASE_URL or not SUPABASE_JWT_SECRET:
-    logger.warning("SUPABASE_URL or SUPABASE_JWT_SECRET missing!")
-
-security = HTTPBearer()
-
+@dataclass(frozen=True)
 class AuthenticatedUser:
-    """Authenticated user with organization context"""
-    def __init__(self, user_id: str, email: str, organization_id: Optional[str] = None, role: Optional[str] = None):
-        self.user_id = user_id
-        self.email = email
-        self.organization_id = organization_id
-        self.role = role
-    
-    def __str__(self):
-        return f"User({self.email}, org={self.organization_id}, role={self.role})"
+    user_id: str
+    email: Optional[str]
+    role: str
+    org_slug: Optional[str]
 
-async def verify_supabase_jwt(token: str) -> Dict[str, Any]:
-    """
-    Validoi Supabase JWT tokenin - YKSINKERTAINEN VERSIO
-    """
-    try:
-        # Tarkista algoritmi
-        header = jwt.get_unverified_header(token)
-        algorithm = header.get('alg')
-        
-        logger.info(f"Token algorithm: {algorithm}")
-        
-        if algorithm == 'HS256':
-            # Vanha HMAC token - käytä secretia
-            logger.info("Using HS256 validation with secret")
-            payload = jwt.decode(
-                token, 
-                SUPABASE_JWT_SECRET, 
-                algorithms=["HS256"],
-                audience="authenticated"
-            )
-        elif algorithm == 'ES256':
-            # Uusi ES256 token - OHITA SIGNATURE VALIDOINTI TOISTAISEKSI
-            logger.warning("ES256 token detected - skipping signature validation for now")
-            payload = jwt.decode(
-                token, 
-                options={"verify_signature": False},
-                audience="authenticated"
-            )
-            
-            # Tarkista vain exp ja aud manuaalisesti
-            import time
-            if payload.get('exp', 0) < time.time():
-                raise HTTPException(401, "Token expired")
-            if payload.get('aud') != 'authenticated':
-                raise HTTPException(401, "Invalid audience")
-                
-        else:
-            raise HTTPException(401, f"Unsupported algorithm: {algorithm}")
-        
-        logger.info(f"JWT validated for user: {payload.get('sub')}")
-        return payload
-        
-    except jwt.ExpiredSignatureError:
-        logger.warning("JWT token expired")
-        raise HTTPException(401, "Token expired")
-    except jwt.InvalidTokenError as e:
-        logger.warning(f"Invalid JWT token: {e}")
-        raise HTTPException(401, "Invalid token")
-    except Exception as e:
-        logger.error(f"JWT validation error: {e}")
-        raise HTTPException(401, "Authentication failed")
+# ---------------------------
+# Helpers
+# ---------------------------
 
-@lru_cache(maxsize=100)
-async def get_organization_from_subdomain(subdomain: str) -> Optional[Dict]:
-    """Hakee organisaation subdomainin perusteella."""
-    if not subdomain or subdomain == 'admin':
+_JWKS_CLIENT: Optional[PyJWKClient] = None
+
+def _get_jwks_client() -> PyJWKClient:
+    global _JWKS_CLIENT
+    jwks_url = os.getenv("SUPABASE_JWKS_URL", "").strip()
+    if not jwks_url:
+        raise HTTPException(status_code=500, detail="Auth misconfigured: SUPABASE_JWKS_URL not set for asymmetric token")
+    if _JWKS_CLIENT is None:
+        _JWKS_CLIENT = PyJWKClient(jwks_url)
+    return _JWKS_CLIENT
+
+def _org_from_host(host: Optional[str]) -> Optional[str]:
+    if not host:
         return None
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            headers = {
-                "apikey": SUPABASE_ANON_KEY,
-                "Authorization": f"Bearer {SUPABASE_ANON_KEY}"
-            }
-            
-            response = await client.get(
-                f"{SUPABASE_URL}/rest/v1/organizations",
-                headers=headers,
-                params={"slug": f"eq.{subdomain}", "select": "id,name,slug,industry_type"}
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                return data[0] if data else None
-            else:
-                logger.warning(f"Failed to fetch organization for subdomain {subdomain}: {response.status_code}")
-                return None
-                
-    except Exception as e:
-        logger.error(f"Error fetching organization: {e}")
+    host = host.split(":", 1)[0].lower()
+    for suf in (".app.drawsync.fi", ".staging.app.drawsync.fi"):
+        if host.endswith(suf):
+            return host[:-len(suf)] or None
+    if host in {"localhost", "127.0.0.1"}:
         return None
-
-async def get_user_organization_role(user_id: str, organization_id: str) -> Optional[str]:
-    """Hakee käyttäjän roolin organisaatiossa."""
-    try:
-        async with httpx.AsyncClient() as client:
-            headers = {
-                "apikey": SUPABASE_ANON_KEY,
-                "Authorization": f"Bearer {SUPABASE_ANON_KEY}"
-            }
-            
-            response = await client.get(
-                f"{SUPABASE_URL}/rest/v1/user_organization_access",
-                headers=headers,
-                params={
-                    "user_id": f"eq.{user_id}",
-                    "organization_id": f"eq.{organization_id}",
-                    "status": "eq.active",
-                    "select": "role"
-                }
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                return data[0]["role"] if data else None
-            else:
-                logger.warning(f"Failed to fetch user role: {response.status_code}")
-                return None
-                
-    except Exception as e:
-        logger.error(f"Error fetching user role: {e}")
-        return None
-
-async def authenticate_request(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    subdomain: Optional[str] = None
-) -> AuthenticatedUser:
-    """Autentikoi pyyntö ja palauttaa käyttäjätiedot."""
-    
-    # 1. Validoi JWT token
-    payload = await verify_supabase_jwt(credentials.credentials)
-    
-    user_id = payload.get("sub")
-    email = payload.get("email")
-    
-    if not user_id:
-        raise HTTPException(401, "Invalid token payload")
-    
-    # 2. Jos ei subdomainia, palauta perus käyttäjä
-    if not subdomain:
-        return AuthenticatedUser(user_id=user_id, email=email)
-    
-    # 3. Hae organisaatio subdomainin perusteella
-    organization = await get_organization_from_subdomain(subdomain)
-    
-    if not organization:
-        raise HTTPException(404, f"Organization not found for subdomain: {subdomain}")
-    
-    # 4. Tarkista käyttäjän oikeudet organisaatiossa
-    role = await get_user_organization_role(user_id, organization["id"])
-    
-    if not role:
-        raise HTTPException(403, f"Access denied to organization: {organization['name']}")
-    
-    logger.info(f"Authenticated: {email} ({role}) -> {organization['name']}")
-    
-    return AuthenticatedUser(
-        user_id=user_id,
-        email=email,
-        organization_id=organization["id"],
-        role=role
-    )
-
-# Helper functions
-async def require_authenticated_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> AuthenticatedUser:
-    """Vaatii vain validin JWT tokenin"""
-    return await authenticate_request(credentials)
-
-from fastapi import Request
-
-def extract_subdomain_from_request(request: Request) -> Optional[str]:
-    """Purkaa subdomainin HTTP request:istä."""
-    host = request.headers.get("host", "")
-    
-    # Development: mantox.pic2data.local:8000
-    if ".local" in host:
-        parts = host.split(".")
-        if len(parts) >= 3 and parts[1] == "pic2data":
-            subdomain = parts[0].split(":")[0]  # Poista :8000 portti
-            return subdomain if subdomain != "pic2data" else None
-    
-    # Production: mantox.pic2data.fi
-    elif "pic2data.fi" in host:
-        parts = host.split(".")
-        if len(parts) >= 3:
-            return parts[0]
-    
     return None
 
-async def authenticate_with_subdomain_from_request(
+def _role_from_payload(payload: dict) -> str:
+    return str(payload.get("role") or (payload.get("app_metadata") or {}).get("role") or "authenticated")
+
+def _ctx_from_payload(payload: dict, host: Optional[str]) -> AuthenticatedUser:
+    sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(status_code=401, detail="Invalid token (no sub)")
+    return AuthenticatedUser(
+        user_id=str(sub),
+        email=payload.get("email"),
+        role=_role_from_payload(payload),
+        org_slug=_org_from_host(host),
+    )
+
+# ---------------------------
+# Decoders
+# ---------------------------
+
+ASYM_ALGS = {"RS256","RS384","RS512","ES256","ES384","ES512","PS256","PS384","PS512","EdDSA"}
+HS_ALGS   = {"HS256","HS384","HS512"}
+
+def _decode_asymmetric_jwks(token: str, alg: str) -> dict:
+    key = _get_jwks_client().get_signing_key_from_jwt(token).key
+    iss = os.getenv("SUPABASE_ISS") or None
+    aud = (os.getenv("SUPABASE_AUD") or "").strip() or None
+    return jwt.decode(
+        token,
+        key,
+        algorithms=[alg],
+        issuer=iss if iss else None,               # verify only if provided
+        audience=aud if aud else None,             # verify only if provided
+        options={"require": ["exp", "iat", "sub"], "verify_aud": bool(aud)},
+        leeway=60,
+    )
+
+def _decode_hs_secret(token: str, alg: str) -> dict:
+    secret = os.getenv("SUPABASE_JWT_SECRET", "").strip()
+    if not secret:
+        raise HTTPException(status_code=500, detail="Auth misconfigured: SUPABASE_JWT_SECRET not set for HS token")
+    # HS: älä pakota iss/aud devissä – Supabasen asetukset vaihtelevat
+    return jwt.decode(
+        token,
+        secret,
+        algorithms=[alg],
+        options={"require": ["exp", "iat", "sub"], "verify_aud": False, "verify_iss": False},
+        leeway=60,
+    )
+
+def _decode_by_alg(token: str) -> dict:
+    try:
+        header = jwt.get_unverified_header(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token header")
+
+    alg = (header.get("alg") or "").upper()
+
+    if alg in ASYM_ALGS:
+        try:
+            return _decode_asymmetric_jwks(token, alg)
+        except Exception:
+            # Pidetään virhe geneerisenä
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+    elif alg in HS_ALGS:
+        try:
+            return _decode_hs_secret(token, alg)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+    else:
+        raise HTTPException(status_code=401, detail="Unsupported token algorithm")
+
+# ---------------------------
+# Public dependencies
+# ---------------------------
+
+async def require_user(
     request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> AuthenticatedUser:
-    """Automaattisesti purkaa subdomainin ja autentikoi."""
-    subdomain = extract_subdomain_from_request(request)
-    return await authenticate_request(credentials, subdomain)
+    token = credentials.credentials  # HTTPBearer: pelkkä token
+    try:
+        payload = _decode_by_alg(token)
+    except InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    user = _ctx_from_payload(payload, request.headers.get("host"))
+    request.state.auth = user
+    return user
+
+async def require_admin(user: AuthenticatedUser = Depends(require_user)) -> AuthenticatedUser:
+    if user.role not in {"admin", "org_admin"}:
+        raise HTTPException(status_code=403, detail="Admin only")
+    return user

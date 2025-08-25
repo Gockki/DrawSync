@@ -227,16 +227,31 @@ const handleUpload = async () => {
     await new Promise(requestAnimationFrame)
     
     // ✅ KÄYTÄ KORJATTUA API CLIENTIA
-    const json = await apiClient.post('/process', form)
-    
-    if (json.success) {
-      setData(json)
-      setEditedData(json.perustiedot || {})
-      setSuccess(true)
-      setTimeout(() => setSuccess(false), 4000)
-    } else {
-      throw new Error(json.error || 'Analyysi epäonnistui')
-    }
+const json = await apiClient.post('/process', form)
+
+// Siedetään eri vastausmuodot:
+//  - { success: true, ... }
+//  - { ok: true, result: {...} }
+//  - { ...payload... } (suora payload)
+const payload = (json && typeof json === 'object')
+  ? (json.result ?? json)
+  : {}
+
+const success =
+  (json && json.success === true) ||
+  (json && json.ok === true && json.result != null) ||
+  (payload && Object.keys(payload).length > 0) // fallback: jos saadaan suoraan käyttökelpoinen payload
+
+if (success) {
+  setData(payload)
+  setEditedData(payload.perustiedot ?? {})
+  setSuccess(true)
+  setTimeout(() => setSuccess(false), 4000)
+} else {
+  const msg = json?.error || json?.detail || 'Analyysi epäonnistui'
+  throw new Error(msg)
+}
+
   } catch (err) {
     console.error('Upload error:', err)
     

@@ -1,66 +1,88 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, EmailStr
-from typing import List, Optional, Dict, Any
-from lib.email_provider import send_email
+from __future__ import annotations
 
+import os
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, EmailStr
+
+from lib.auth_middleware import require_user, AuthenticatedUser
+
+try:
+    import resend  # type: ignore
+except Exception:
+    resend = None
 
 router = APIRouter(prefix="/quotes", tags=["quotes"])
 
 class QuoteEmailRequest(BaseModel):
     to: List[EmailStr]
+    cc: Optional[List[EmailStr]] = []
     subject: str
     html: str
-    cc: Optional[List[EmailStr]] = None
     reply_to: Optional[EmailStr] = None
-    pricing: Optional[Dict[str, Any]] = None
-    product: Optional[Dict[str, Any]] = None
 
-def build_html_from_data(pricing: Dict[str, Any], product: Dict[str, Any]) -> str:
-    # Kevyt, mobiiliystävällinen HTML. Voidaan myöhemmin kaunistaa.
-    tn = product.get("tuotenimi") or product.get("product_name") or "Tuote"
-    tk = product.get("tuotekoodi") or product.get("product_code") or "-"
-    total = pricing.get("total")
-    coating = pricing.get("coating")
-    variant = pricing.get("variant")
-    m2 = pricing.get("surfaceAreaM2")
-    delivery = pricing.get("deliveryTime")
-    delivery_txt = f"{delivery['min']}-{delivery['max']} päivää" if isinstance(delivery, dict) else "7–14 päivää"
+class QuoteEmailResponse(BaseModel):
+    ok: bool
+    id: Optional[str] = None
+    message: Optional[str] = None
 
-    return f"""
-<!doctype html>
-<html><body style="font:14px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial">
-  <div style="max-width:640px;margin:auto;padding:24px;border:1px solid #eee;border-radius:12px">
-    <h2 style="margin:0 0 16px">Tarjous</h2>
-    <p style="margin:0 0 16px;color:#555">Hei! Tässä tarjous pyynnönne perusteella.</p>
+def _ensure_resend_ready() -> None:
+    if resend is None:
+        raise HTTPException(status_code=500, detail="Email provider not available (resend client missing)")
+    api_key = os.getenv("RESEND_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=500, detail="RESEND_API_KEY not configured")
+    resend.api_key = api_key
 
-    <table style="width:100%;border-collapse:collapse;margin:16px 0">
-      <tr><td style="padding:8px 0;color:#666">Tuotenimi</td><td style="padding:8px 0;text-align:right"><strong>{tn}</strong></td></tr>
-      <tr><td style="padding:8px 0;color:#666">Tuotekoodi</td><td style="padding:8px 0;text-align:right">{tk}</td></tr>
-      <tr><td style="padding:8px 0;color:#666">Pinnoite</td><td style="padding:8px 0;text-align:right">{coating or "-"} / {variant or "-"}</td></tr>
-      <tr><td style="padding:8px 0;color:#666">Pinta-ala</td><td style="padding:8px 0;text-align:right">{(m2 or 0):.4f} m²</td></tr>
-      <tr><td style="padding:8px 0;border-top:1px solid #eee;color:#333"><strong>Kokonaishinta (sis. ALV)</strong></td>
-          <td style="padding:8px 0;border-top:1px solid #eee;text-align:right"><strong>{(total or 0):.2f} €</strong></td></tr>
-    </table>
+def _from_header() -> str:
+    """
+    Rakenna 'From' header ympäristömuuttujista:
+    1) FROM_EMAIL (+ FROM_NAME jos annettu), esim: 'Mantox Solutions <onboarding@resend.dev>'
+    2) EMAIL_FROM (jos käytössä vanha muuttujanimi), esim: 'DrawSync <noreply@...>'
+    """
+    from_email = os.getenv("FROM_EMAIL", "").strip()
+    from_name = os.getenv("FROM_NAME", "").strip()
+    if from_email:
+        return f"{from_name} <{from_email}>" if from_name else from_email
+    email_from_legacy = os.getenv("EMAIL_FROM", "").strip()
+    return email_from_legacy or "DrawSync <noreply@drawsync.local>"
 
-    <p style="margin:16px 0;color:#333"><strong>Arvioitu toimitusaika:</strong> {delivery_txt}</p>
+def _reply_to_default() -> Optional[str]:
+    # prioriteetti: EMAIL_REPLY_TO -> FROM_EMAIL -> None
+    rt = os.getenv("EMAIL_REPLY_TO", "").strip()
+    if rt:
+        return rt
+    fe = os.getenv("FROM_EMAIL", "").strip()
+    return fe or None
 
-    <p style="margin:16px 0;color:#666">Tarjous on voimassa 30 päivää. Kysythän rohkeasti, jos tarvitsette lisätietoja.</p>
-    <p style="margin:24px 0 0">Ystävällisin terveisin,<br><strong>Mantox Solutions</strong></p>
-  </div>
-</body></html>
-"""
+@router.post("/send", response_model=QuoteEmailResponse)
+async def send_quote_email(
+    req: QuoteEmailRequest,
+    user: AuthenticatedUser = Depends(require_user),
+) -> QuoteEmailResponse:
+    if not req.to:
+        raise HTTPException(status_code=422, detail="'to' must contain at least one recipient")
+    if not req.subject.strip():
+        raise HTTPException(status_code=422, detail="'subject' is required")
+    if not req.html.strip():
+        raise HTTPException(status_code=422, detail="'html' is required")
 
+    _ensure_resend_ready()
 
-@router.post("/send")
-async def send_quote(req: QuoteEmailRequest):
+    from_header = _from_header()
+    reply_to = req.reply_to or _reply_to_default()
+
     try:
-        result = send_email(
-            to=req.to,
-            subject=req.subject,
-            html=req.html,
-            cc=req.cc,
-            reply_to=req.reply_to,
-        )
-        return {"ok": True, "id": result.get("id")}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        result = resend.Emails.send({
+            "from": from_header,
+            "to": req.to,
+            "cc": req.cc or [],
+            "subject": req.subject,
+            "html": req.html,
+            **({"reply_to": reply_to} if reply_to else {}),
+        })
+        msg_id = result.get("id") if isinstance(result, dict) else None
+        return QuoteEmailResponse(ok=True, id=msg_id)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Email provider error")
