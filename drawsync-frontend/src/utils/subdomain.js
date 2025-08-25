@@ -25,11 +25,11 @@ export const getSubdomain = (hostname) => {
     if (parts.length >= 3) {
       // Special mappings for current Vercel deployment
       const urlMap = {
-        'draw-sync-nu': 'mantox',  // Current deployment → Mantox
+        'draw-sync-nu': 'mantox',  // Main deployment → Mantox
+        'terstesti-draw-sync-nu': 'terstesti-oy',  // TeräsTesti domain
+        'admin-draw-sync-nu': 'admin',  // Admin domain
         'mantox-drawsync': 'mantox',
-        'terstesti-drawsync': 'terstesti-oy',
-        'testiyritys-drawsync': 'testi-yritys-oy',
-        'admin-drawsync': 'admin'
+        'testiyritys-drawsync': 'testi-yritys-oy'
       }
       
       const vercelName = parts[0]
