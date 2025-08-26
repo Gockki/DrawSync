@@ -17,9 +17,24 @@ export const getSubdomain = (hostname) => {
     }
   }
   
+  // ✅ PRODUCTION DOMAIN - wisuron.fi
+  if (cleanHost.includes('.wisuron.fi') || cleanHost === 'wisuron.fi') {
+    if (cleanHost === 'wisuron.fi') {
+      console.log('📍 Main wisuron.fi domain (no subdomain)')
+      return null
+    }
+    
+    const parts = cleanHost.split('.')
+    if (parts.length >= 2) {
+      const subdomain = parts[0]
+      console.log('📍 Wisuron subdomain:', subdomain)
+      return subdomain
+    }
+  }
+  
   // ✅ HOSTING PATTERNS - dynaamiset domainit
   
-  // Vercel deployment patterns
+  // Vercel deployment patterns (fallback for existing deployments)
   if (cleanHost.includes('.vercel.app')) {
     const parts = cleanHost.split('.')
     if (parts.length >= 3) {
@@ -55,13 +70,13 @@ export const getSubdomain = (hostname) => {
     }
   }
   
-  // ✅ CUSTOM DOMAIN SUPPORT (kun domain tulee)
+  // ✅ GENERIC CUSTOM DOMAIN SUPPORT
   const parts = cleanHost.split('.')
   if (parts.length >= 3) {
     // Exclude common prefixes
     const subdomain = parts[0]
-    if (!['www', 'api', 'mail', 'ftp', 'admin'].includes(subdomain)) {
-      console.log('📍 Custom domain subdomain:', subdomain)
+    if (!['www', 'api', 'mail', 'ftp'].includes(subdomain)) {
+      console.log('📍 Generic custom domain subdomain:', subdomain)
       return subdomain
     }
   }
@@ -112,10 +127,13 @@ export const debugSubdomain = () => {
       isLocal: hostname.includes('.local'),
       isVercel: hostname.includes('.vercel.app'),
       isRailway: hostname.includes('.railway.app'),
+      isWisuron: hostname.includes('.wisuron.fi') || hostname === 'wisuron.fi',
       isCustomDomain: !hostname.includes('.local') && 
                       !hostname.includes('.vercel.app') && 
                       !hostname.includes('.railway.app') &&
-                      !hostname.includes('localhost'),
+                      !hostname.includes('localhost') &&
+                      !hostname.includes('.wisuron.fi') &&
+                      hostname !== 'wisuron.fi',
       parts: hostname.split('.')
     }
   }
@@ -132,6 +150,8 @@ export const getEnvironment = () => {
     return 'development'
   } else if (hostname.includes('.vercel.app') || hostname.includes('.railway.app')) {
     return 'staging'
+  } else if (hostname.includes('.wisuron.fi') || hostname === 'wisuron.fi') {
+    return 'production'
   } else {
     return 'production'
   }
