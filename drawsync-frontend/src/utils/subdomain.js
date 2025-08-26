@@ -26,9 +26,18 @@ export const getSubdomain = (hostname) => {
     
     const parts = cleanHost.split('.')
     if (parts.length >= 2) {
-      const subdomain = parts[0]
-      console.log('📍 Wisuron subdomain:', subdomain)
-      return subdomain
+      const rawSubdomain = parts[0]
+      
+      // Map wisuron.fi subdomains to database slugs
+      const subdomainMap = {
+        'mantox': 'mantox',
+        'terstesti': 'terstesti-oy',
+        'admin': 'admin'
+      }
+      
+      const mappedSubdomain = subdomainMap[rawSubdomain] || rawSubdomain
+      console.log(`📍 Wisuron subdomain: ${rawSubdomain} → ${mappedSubdomain}`)
+      return mappedSubdomain
     }
   }
   
