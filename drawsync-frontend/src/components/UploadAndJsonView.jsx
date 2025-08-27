@@ -316,44 +316,48 @@ if (success) {
       : prev.filter(x => x !== t))
   }
 
-  // ✅ Updated generateQuote function to accept parameters
-  const generateQuote = async (recipientEmail, emailSubject, emailMessage) => {
-    if (!pricing) {
-      throw new Error('Valitse ensin palvelu hinnoittelua varten!')
-    }
-
-    try {
-      // Rakenna HTML viesti
-      const html = buildQuoteHtml({ pricing, data })
-      
-      // Käytä parametreja jos annettu, muuten fallback
-      const to = recipientEmail || import.meta.env.VITE_DEFAULT_QUOTE_TO || 'jere@mantox.fi'
-      const subject = emailSubject || `Tarjous – ${data?.perustiedot?.tuotenimi || data?.perustiedot?.tuotekoodi || 'Mantox'}`
-      
-      // Combine custom message with HTML quote
-      let finalHtml = html
-      if (emailMessage) {
-        finalHtml = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5;color:#111;white-space:pre-line;margin-bottom:24px;">${emailMessage}</div>${html}`
-      }
-
-      const resp = await sendQuoteEmail({
-        to,
-        cc: [],
-        subject,
-        html: finalHtml,
-        replyTo: 'jere@mantox.fi'
-      })
-
-      if (resp?.ok) {
-        alert(`Tarjous lähetetty: ${resp.id}`)
-      } else {
-        throw new Error('Lähetys epäonnistui (tuntematon virhe).')
-      }
-    } catch (err) {
-      console.error('Quote generation error:', err)
-      throw err
-    }
+const generateQuote = async (recipientEmail, emailSubject, emailMessage) => {
+  if (!pricing) {
+    throw new Error('Valitse ensin palvelu hinnoittelua varten!')
   }
+
+  // Tarkista että sähköposti on annettu
+  if (!recipientEmail || !recipientEmail.trim()) {
+    throw new Error('Sähköpostiosoite on pakollinen')
+  }
+
+  try {
+    // Rakenna HTML viesti
+    const html = buildQuoteHtml({ pricing, data })
+    
+    // Käytä vain annettua sähköpostia - EI fallbackia
+    const to = recipientEmail.trim()
+    const subject = emailSubject || `Tarjous – ${data?.perustiedot?.tuotenimi || data?.perustiedot?.tuotekoodi || 'Mantox'}`
+    
+    // Combine custom message with HTML quote
+    let finalHtml = html
+    if (emailMessage) {
+      finalHtml = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5;color:#111;white-space:pre-line;margin-bottom:24px;">${emailMessage}</div>${html}`
+    }
+
+    const resp = await sendQuoteEmail({
+      to,
+      cc: [],
+      subject,
+      html: finalHtml,
+      replyTo: 'noreply@wisuron.fi'  // Käytä wisuron.fi osoitetta
+    })
+
+    if (resp?.ok) {
+      alert(`Tarjous lähetetty: ${resp.id}`)
+    } else {
+      throw new Error('Lähetys epäonnistui (tuntematon virhe).')
+    }
+  } catch (err) {
+    console.error('Quote generation error:', err)
+    throw err
+  }
+}
 
   const handleSaveProject = async () => {
     if (!data || !file || !organization || !user) {

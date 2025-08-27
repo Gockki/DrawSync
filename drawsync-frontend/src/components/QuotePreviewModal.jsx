@@ -33,7 +33,7 @@ ${organizationData?.name || 'Tiimimme'}`)
   // ✅ Local state for customer data (editable)
   const [customerData, setCustomerData] = useState(initialCustomerData || {
     name: '',
-    email: 'jere@mantox.fi', // Default to allowed email
+    email: '', // Default to allowed email
     company: '',
     phone: ''
   })
@@ -150,13 +150,6 @@ const handleSend = async () => {
                 />
               </div>
             </div>
-            
-            {/* Email restriction notice */}
-            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm text-yellow-800">
-                ⚠️ <strong>Huomio:</strong> Ilman custom domain:ia viestit voidaan lähettää vain osoitteeseen <code>jere@mantox.fi</code>
-              </p>
-            </div>
           </div>
 
           {/* Email Subject */}
@@ -264,15 +257,13 @@ const handleSend = async () => {
               ) : (
                 <>
                   <Send className="h-4 w-4" />
-                  Lähetä tarjous (→ jere@mantox.fi)
+                  Lähetä tarjous
                 </>
               )}
             </button>
           </div>
           
-          <p className="text-yellow-600 text-sm mt-2 text-center">
-            💡 Demo-tilassa kaikki tarjoukset lähetetään osoitteeseen jere@mantox.fi
-          </p>
+
         </div>
       </div>
     </div>
