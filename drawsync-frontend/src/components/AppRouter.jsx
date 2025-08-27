@@ -12,6 +12,7 @@ import AdminDashboard from '../pages/adminpage/AdminDashboard'
 import PrivateRoute from './PrivateRoute'
 import OrganizationAdmin from '../pages/OrganizationAdmin'
 import Join from '../pages/Join'
+import AuthCallback from '../pages/AuthCallback'
 
 // Landing page component (for main domain)
 const LandingPage = () => (
