@@ -53,62 +53,44 @@ export default function Join() {
     }
   }
 
-// Join.jsx - korjattu handleSubmit
+// Join.jsx - lisää redirectTo parametri
+// Join.jsx - tallenna token localStorage
 const handleSubmit = async (e) => {
-  e.preventDefault()
-  setError('')
+  // ... validation ...
   
-  if (formData.password !== formData.confirmPassword) {
-    setError('Passwords do not match')
-    return
-  }
-
-  if (formData.password.length < 6) {
-    setError('Password must be at least 6 characters')
-    return
-  }
-
-  setIsRegistering(true)
-
   try {
-    // 1. Register user
+    // ✅ Tallenna invitation token ennen rekisteröintiä
+    localStorage.setItem('pending_invitation_token', token)
+    
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: formData.email,
-      password: formData.password
+      password: formData.password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`
+      }
     })
-
+    
     if (authError) throw authError
+    
     const user = authData.user
     if (!user) throw new Error('Registration failed')
-
-    console.log('✅ User registered:', user.id)
-
-    // 2. Sign in immediately after registration
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: formData.email,
-      password: formData.password
-    })
-
-    if (signInError) throw signInError
-    console.log('✅ User signed in:', signInData.user.id)
-
-    // 3. Accept invitation (TÄMÄ ON KRIITTINEN!)
+    
+    // Jos tarvii email confirmation
+    if (!user.email_confirmed_at) {
+      alert('Registration successful! Please check your email and click the confirmation link.')
+      return
+    }
+    
+    // Jos ei tarvii confirmation, poista token ja jatka
+    localStorage.removeItem('pending_invitation_token')
     await db.acceptInvitation(token, user.id)
-    console.log(' Invitation accepted')
-
-    // 4. Redirect to CORRECT organization subdomain
-    const orgSubdomain = invitation.organization.slug
-    const orgUrl = `https://${orgSubdomain}.wisuron.fi/app`
     
-    setError('')
-    alert('Registration successful! Redirecting to your organization...')
-    
-    // Käytä window.location.href redirect
     setTimeout(() => {
       window.location.href = '/app'
     }, 2000)
-
+    
   } catch (error) {
+    localStorage.removeItem('pending_invitation_token')
     console.error('Registration failed:', error)
     setError(error.message)
   } finally {

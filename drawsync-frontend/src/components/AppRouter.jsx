@@ -92,7 +92,8 @@ export default function AppRouter() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/join" element={<Join />} />  
+      <Route path="/join" element={<Join />} /> 
+      <Route path="/auth/callback" element={<AuthCallback />} /> 
       <Route path="/app" element={
         <PrivateRoute>
           <UploadAndJsonView />
@@ -119,19 +120,20 @@ export default function AppRouter() {
     </Routes>
   )
 }
-  // Organization Login (mantox.pic2data.local/login)
+  
   if (routingMode === 'ORGANIZATION_LOGIN') {
 
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/join" element={<Join />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     )
   }
 
-  // Organization App (mantox.pic2data.local, finecom.pic2data.local)
+  
   if (routingMode === 'ORGANIZATION') {
     // If no organization found, redirect to login
     if (!organization) {
