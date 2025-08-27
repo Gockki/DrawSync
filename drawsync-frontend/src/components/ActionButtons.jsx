@@ -28,18 +28,18 @@ export default function ActionButtons({
     setShowQuotePreview(true);
   };
 
-  const handleSendQuote = async (emailSubject, emailMessage,customerData) => {
-    if (!"jere@mantox.fi") {
-      throw new Error('Asiakkaan sähköpostiosoite puuttuu');
-    }
+const handleSendQuote = async (recipientEmail, emailSubject, emailMessage, customerData) => {
+  const recipient = (recipientEmail || customerData?.email || '').trim();
+  if (!recipient) {
+    throw new Error('Asiakkaan sähköpostiosoite puuttuu');
+  }
 
-    try {
-      // Lähetetään tarjous (käytetään olemassaolevaa logiikkaa)
-      await onGenerateQuote("jere@mantox.fi", emailSubject, emailMessage);
-    } catch (error) {
-      throw new Error('Tarjouksen lähettäminen epäonnistui: ' + error.message);
-    }
-  };
+  try {
+    await onGenerateQuote(recipient, emailSubject, emailMessage);
+  } catch (error) {
+    throw new Error('Tarjouksen lähettäminen epäonnistui: ' + error.message);
+  }
+};
 
   return (
     <>
