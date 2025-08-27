@@ -1,7 +1,9 @@
+// src/pages/OrganizationAdmin.jsx - KORJATTU TÄYDELLINEN VERSIO
 import { useState, useEffect } from 'react'
 import { db } from '../services/database'
 import { useOrganization } from '../contexts/OrganizationContext'
 import { apiClient } from '../utils/apiClient'
+import { getSubdomain } from '../utils/subdomain'
 import { 
   Users, 
   Mail, 
@@ -109,8 +111,8 @@ export default function OrganizationAdmin() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'members' && <MembersTab members={members} onRefresh={loadData} />}
-        {activeTab === 'invitations' && <InvitationsTab invitations={invitations} onRefresh={loadData} />}
+        {activeTab === 'members' && <MembersTab members={members} onRefresh={loadData} onRemoveMember={handleRemoveMember} />}
+        {activeTab === 'invitations' && <InvitationsTab invitations={invitations} onRefresh={loadData} organization={organization} />}
         {activeTab === 'settings' && <SettingsTab organization={organization} />}
       </div>
 
@@ -132,52 +134,13 @@ export default function OrganizationAdmin() {
           <UserPlus className="h-6 w-6" />
         </button>
       </div>
-
-      {/* Delete Confirmation Modal */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Remove Member</h3>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to remove <strong>{deleteConfirm.user?.email || deleteConfirm.user_id}</strong> from the team? 
-              They will lose access to all organization projects.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleRemoveMember(deleteConfirm.user_id, deleteConfirm.user?.email || deleteConfirm.user_id)}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-              >
-                Remove Member
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 }
 
-// Members Tab Component
-const MembersTab = ({ members, onRefresh }) => {
+// ✅ MEMBERS TAB - Korjattu
+const MembersTab = ({ members, onRefresh, onRemoveMember }) => {
   const [deleteConfirm, setDeleteConfirm] = useState(null)
-
-  const handleRemoveMember = async (userId, userEmail) => {
-    try {
-      await db.removeUserFromOrganization(userId, organization.id)
-      onRefresh()
-      setDeleteConfirm(null)
-      alert(`Removed ${userEmail} from organization`)
-    } catch (error) {
-      console.error('Failed to remove member:', error)
-      alert('Failed to remove member: ' + error.message)
-    }
-  }
 
   return (
     <>
@@ -216,7 +179,7 @@ const MembersTab = ({ members, onRefresh }) => {
                   </span>
                   {member.role !== 'owner' && (
                     <button
-                      onClick={() => setDeleteConfirm({ user_id: member.user_id, user: { email: member.user_id } })}
+                      onClick={() => setDeleteConfirm(member)}
                       className="text-red-600 hover:text-red-800 p-1"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -234,7 +197,7 @@ const MembersTab = ({ members, onRefresh }) => {
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Remove Member</h3>
             <p className="text-gray-600 mb-6">
-              Are you sure you want to remove <strong>{deleteConfirm.user?.email || deleteConfirm.user_id}</strong> from the team? 
+              Are you sure you want to remove <strong>{deleteConfirm.user_id}</strong> from the team? 
               They will lose access to all organization projects.
             </p>
             <div className="flex justify-end gap-3">
@@ -245,7 +208,10 @@ const MembersTab = ({ members, onRefresh }) => {
                 Cancel
               </button>
               <button
-                onClick={() => handleRemoveMember(deleteConfirm.user_id, deleteConfirm.user?.email || deleteConfirm.user_id)}
+                onClick={() => {
+                  onRemoveMember(deleteConfirm.user_id, deleteConfirm.user_id)
+                  setDeleteConfirm(null)
+                }}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
               >
                 Remove Member
@@ -258,14 +224,14 @@ const MembersTab = ({ members, onRefresh }) => {
   )
 }
 
-// Invitations Tab Component
-const InvitationsTab = ({ invitations, onRefresh }) => {
-  const { organization } = useOrganization()
+// ✅ INVITATIONS TAB - Korjattu
+const InvitationsTab = ({ invitations, onRefresh, organization }) => {
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
+  // ✅ KORJATTU deleteInvitation
   const handleDeleteInvitation = async (invitationId) => {
     try {
-      await db.deleteInvitation(invitationId)
+      await db.deleteInvitation(invitationId)  // ← OIKEA db importti!
       onRefresh()
       setDeleteConfirm(null)
       alert('Invitation deleted')
@@ -400,7 +366,7 @@ const SettingsTab = ({ organization }) => (
   </div>
 )
 
-// ✅ KORJATTU InviteModal komponentti
+// ✅ INVITE MODAL - Korjattu
 const InviteModal = ({ organization, currentUser, onClose, onSuccess }) => {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('user')
