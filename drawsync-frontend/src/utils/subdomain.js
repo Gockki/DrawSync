@@ -1,4 +1,4 @@
-// src/utils/subdomain.js - KORJATTU HOSTINGIIN
+// src/utils/subdomain.js - KORJATTU WWW HANDLING
 import { db } from '../services/database'
 
 export const getSubdomain = (hostname) => {
@@ -7,26 +7,22 @@ export const getSubdomain = (hostname) => {
   // Remove port numbers
   const cleanHost = hostname.split(':')[0]
   
-  // Development patterns
-  if (cleanHost.includes('.local')) {
-    const parts = cleanHost.split('.')
-    if (parts.length >= 3 && parts[1] === 'pic2data') {
-      const subdomain = parts[0]
-      console.log('📍 Development subdomain:', subdomain)
-      return subdomain === 'pic2data' ? null : subdomain
-    }
+  // ✅ WISURON.FI PRODUCTION HANDLING (TÄRKEIMMÄT ENSIN!)
+  if (cleanHost === 'wisuron.fi' || cleanHost === 'www.wisuron.fi') {
+    console.log('📍 Main wisuron.fi domain (no subdomain)')
+    return null
   }
   
-  // ✅ PRODUCTION DOMAIN - wisuron.fi
-  if (cleanHost.includes('.wisuron.fi') || cleanHost === 'wisuron.fi') {
-    if (cleanHost === 'wisuron.fi') {
-      console.log('📍 Main wisuron.fi domain (no subdomain)')
-      return null
-    }
-    
+  if (cleanHost.includes('.wisuron.fi')) {
     const parts = cleanHost.split('.')
     if (parts.length >= 2) {
       const rawSubdomain = parts[0]
+      
+      // Skip www - it's main domain
+      if (rawSubdomain === 'www') {
+        console.log('📍 WWW wisuron.fi domain (no subdomain)')
+        return null
+      }
       
       // Map wisuron.fi subdomains to database slugs
       const subdomainMap = {
@@ -41,9 +37,19 @@ export const getSubdomain = (hostname) => {
     }
   }
   
+  // Development patterns
+  if (cleanHost.includes('.local')) {
+    const parts = cleanHost.split('.')
+    if (parts.length >= 3 && parts[1] === 'pic2data') {
+      const subdomain = parts[0]
+      console.log('📍 Development subdomain:', subdomain)
+      return subdomain === 'pic2data' ? null : subdomain
+    }
+  }
+  
   // ✅ HOSTING PATTERNS - dynaamiset domainit
   
-  // Vercel deployment patterns (fallback for existing deployments)
+  // Vercel deployment patterns
   if (cleanHost.includes('.vercel.app')) {
     const parts = cleanHost.split('.')
     if (parts.length >= 3) {
@@ -69,7 +75,7 @@ export const getSubdomain = (hostname) => {
     }
   }
   
-  // Railway deployment: app.railway.app, mantox-api.railway.app
+  // Railway deployment
   if (cleanHost.includes('.railway.app')) {
     const parts = cleanHost.split('.')
     if (parts.length >= 3) {
@@ -79,11 +85,12 @@ export const getSubdomain = (hostname) => {
     }
   }
   
-  // ✅ GENERIC CUSTOM DOMAIN SUPPORT
+  // ✅ GENERIC CUSTOM DOMAIN SUPPORT (VIIMEINEN FALLBACK)
   const parts = cleanHost.split('.')
   if (parts.length >= 3) {
-    // Exclude common prefixes
     const subdomain = parts[0]
+    
+    // ✅ KORJATTU: www EI ole subdomain vaan main domain
     if (!['www', 'api', 'mail', 'ftp'].includes(subdomain)) {
       console.log('📍 Generic custom domain subdomain:', subdomain)
       return subdomain
