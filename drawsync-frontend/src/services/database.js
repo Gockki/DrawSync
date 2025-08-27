@@ -81,56 +81,67 @@ class DatabaseService {
     return data
   }
 
-  async getInvitationByToken(token) {
-    console.log('🔍 Looking for invitation with token:', token)
-    
-    const { data, error } = await this.supabase
-      .from('invitations')
-      .select('*')
-      .eq('token', token)
-      .eq('status', 'pending')
-    
-    console.log('📊 Query result:', { data, error, count: data?.length })
-    
-    if (error) {
-      console.log('❌ Query error:', error.message)
-      return null
-    }
-    
-    if (!data || data.length === 0) {
-      console.log('❌ No invitations found')
-      return null
-    }
-    
-    const invitation = data[0]
-    console.log('✅ Found invitation:', invitation)
-    
-    // Check expiry manually
-    const now = new Date()
-    const expiresAt = new Date(invitation.expires_at)
-    if (expiresAt < now) {
-      console.log('❌ Invitation expired')
-      return null
-    }
-    
-    // Hae organization erikseen
-    try {
-      const { data: orgData, error: orgError } = await this.supabase
-        .from('organizations')
-        .select('*')
-        .eq('id', invitation.organization_id)
-        .single()
-      
-      if (!orgError && orgData) {
-        invitation.organization = orgData
-        console.log('✅ Added organization:', orgData.name)
-      }
-    } catch (orgError) {
-      console.error('Failed to load organization:', orgError)
-    }
-    
-    return invitation
+async getInvitationByToken(token) {
+  console.log('🔍 Looking for invitation with token:', token);
+  
+  const { data, error } = await this.supabase
+    .from('invitations')
+    .select('*')
+    .eq('token', token)
+    .eq('status', 'pending');
+
+  console.log('📊 Query result:', { data, error, count: data?.length });
+
+  if (error) {
+    console.log('❌ Query error:', error.message);
+    return null;
   }
+  if (!data || data.length === 0) {
+    console.log('❌ No invitations found');
+    return null;
+  }
+
+  const invitation = data[0];
+  console.log('✅ Found invitation:', invitation);
+
+  // ✅ Robust expiryn tarkistus
+  const now = new Date();
+  let expiresAt = null;
+
+  if (invitation.expires_at) {
+    const d = new Date(invitation.expires_at);
+    if (!Number.isNaN(d.getTime())) expiresAt = d;
+  }
+  if (!expiresAt && invitation.created_at) {
+    const d = new Date(invitation.created_at);
+    if (!Number.isNaN(d.getTime())) {
+      expiresAt = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000);
+    }
+  }
+  if (!expiresAt || expiresAt < now) {
+    console.log('❌ Invitation expired (computed)', { expiresAt, now });
+    return null;
+  }
+
+  // (nykyinen orgin lataus + return)
+  try {
+    const { data: orgData, error: orgError } = await this.supabase
+      .from('organizations')
+      .select('*')
+      .eq('id', invitation.organization_id)
+      .single();
+
+    if (!orgError && orgData) {
+      invitation.organization = orgData;
+      console.log('✅ Added organization:', orgData.name);
+    }
+  } catch (orgError) {
+    console.error('Failed to load organization:', orgError);
+  }
+
+  return invitation;
+}
+
 
   // ✅ KORJATTU acceptInvitation metodi
   async acceptInvitation(token, userId) {
