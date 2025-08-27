@@ -1,4 +1,3 @@
-// src/pages/Join.jsx
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
@@ -9,6 +8,7 @@ export default function Join() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const token = searchParams.get('token')
+  const orgSlug = searchParams.get('org')  // ← Uusi parameter
 
   const [loading, setLoading] = useState(true)
   const [invitation, setInvitation] = useState(null)
@@ -21,10 +21,8 @@ export default function Join() {
   })
 
   useEffect(() => {
-  console.log(' URL search params:', searchParams.toString())
-  console.log(' Token from URL:', token)
-  console.log(' Token type:', typeof token)
-  console.log(' Token length:', token?.length)
+    console.log('🔍 Join page params:', { token, orgSlug })
+    
     if (!token) {
       setError('Invalid invitation link')
       setLoading(false)
@@ -53,50 +51,100 @@ export default function Join() {
     }
   }
 
-// Join.jsx - lisää redirectTo parametri
-// Join.jsx - tallenna token localStorage
-const handleSubmit = async (e) => {
-  // ... validation ...
-  
-  try {
-    // ✅ Tallenna invitation token ennen rekisteröintiä
-    localStorage.setItem('pending_invitation_token', token)
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
     
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: formData.email,
-      password: formData.password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`
-      }
-    })
-    
-    if (authError) throw authError
-    
-    const user = authData.user
-    if (!user) throw new Error('Registration failed')
-    
-    // Jos tarvii email confirmation
-    if (!user.email_confirmed_at) {
-      alert('Registration successful! Please check your email and click the confirmation link.')
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match')
       return
     }
-    
-    // Jos ei tarvii confirmation, poista token ja jatka
-    localStorage.removeItem('pending_invitation_token')
-    await db.acceptInvitation(token, user.id)
-    
-    setTimeout(() => {
-      window.location.href = '/app'
-    }, 2000)
-    
-  } catch (error) {
-    localStorage.removeItem('pending_invitation_token')
-    console.error('Registration failed:', error)
-    setError(error.message)
-  } finally {
-    setIsRegistering(false)
+
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+
+    setIsRegistering(true)
+
+    try {
+      // ✅ 1. Tallenna invitation context ennen rekisteröintiä
+      const invitationContext = {
+        token: token,
+        organizationSlug: orgSlug || invitation.organization.slug,
+        organizationId: invitation.organization_id,
+        role: invitation.role,
+        email: formData.email,
+        timestamp: Date.now()
+      }
+      
+      // Tallenna multiple storage locations
+      localStorage.setItem('pending_invitation', JSON.stringify(invitationContext))
+      sessionStorage.setItem('pending_invitation', JSON.stringify(invitationContext))
+      
+      // Tallenna myös cookie (cross-subdomain)
+      const expiryDate = new Date()
+      expiryDate.setTime(expiryDate.getTime() + (24 * 60 * 60 * 1000)) // 24h
+      document.cookie = `pending_invitation=${encodeURIComponent(JSON.stringify(invitationContext))}; expires=${expiryDate.toUTCString()}; domain=.wisuron.fi; path=/`
+
+      console.log('✅ Invitation context saved:', invitationContext)
+
+      // ✅ 2. Rekisteröinti - ÄLYKÄS emailRedirectTo
+      const targetOrgUrl = `https://${invitationContext.organizationSlug}.wisuron.fi/auth/callback`
+      
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: targetOrgUrl  // ← SUORAAN ORGANISAATION SUBDOMAINILLE!
+        }
+      })
+
+      if (authError) throw authError
+      const user = authData.user
+      if (!user) throw new Error('Registration failed')
+
+      console.log('✅ User registered:', user.id)
+
+      // ✅ 3. Jos EI tarvita email confirmation → hyväksy heti
+      if (user.email_confirmed_at) {
+        console.log('✅ User already confirmed, accepting invitation immediately')
+        
+        await db.acceptInvitation(token, user.id)
+        
+        // Siivoa tallennetut tiedot
+        localStorage.removeItem('pending_invitation')
+        sessionStorage.removeItem('pending_invitation')
+        document.cookie = 'pending_invitation=; expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.wisuron.fi; path=/'
+        
+        setError('')
+        alert('Registration and invitation successful! Redirecting to your organization...')
+        
+        setTimeout(() => {
+          window.location.href = `https://${invitationContext.organizationSlug}.wisuron.fi/app`
+        }, 2000)
+        
+      } else {
+        // ✅ 4. Email confirmation tarvitaan
+        setError('')
+        alert(`Registration successful! Please check your email and click the confirmation link. 
+        
+The confirmation link will redirect you directly to your organization at ${invitationContext.organizationSlug}.wisuron.fi`)
+      }
+
+    } catch (error) {
+      console.error('Registration failed:', error)
+      
+      // Siivoa virhetilanteessa
+      localStorage.removeItem('pending_invitation')
+      sessionStorage.removeItem('pending_invitation')
+      document.cookie = 'pending_invitation=; expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.wisuron.fi; path=/'
+      
+      setError(error.message)
+    } finally {
+      setIsRegistering(false)
+    }
   }
-}
 
   if (loading) {
     return (
@@ -203,9 +251,10 @@ const handleSubmit = async (e) => {
           </button>
         </form>
 
-        {/* Footer */}
         <div className="mt-6 text-center text-xs text-gray-500">
-          <p>By joining, you agree to access {invitation?.organization?.name}'s projects and data.</p>
+          <p>
+            By joining, you agree to access {invitation?.organization?.name}'s projects and data.
+          </p>
         </div>
       </div>
     </div>

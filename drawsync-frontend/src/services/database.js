@@ -1,4 +1,3 @@
-// src/services/database.js
 import { supabase } from '../supabaseClient'
 
 class DatabaseService {
@@ -6,11 +5,10 @@ class DatabaseService {
     this.supabase = supabase
   }
 
-  // ✅ KORJATTU getUsersInOrganization (poista toinen versio!)
   async getUsersInOrganization(organizationId) {
     const { data, error } = await this.supabase
       .from('user_organization_access')
-      .select('*')  // ← Pelkkä * ilman auth.users joinia
+      .select('*')
       .eq('organization_id', organizationId)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
@@ -19,7 +17,6 @@ class DatabaseService {
     return data
   }
 
-  // ✅ LISÄÄ PUUTTUVA getUserRoleInOrganization
   async getUserRoleInOrganization(userId, organizationId) {
     console.log('🔍 getUserRoleInOrganization called with:', { userId, organizationId })
     const { data, error } = await this.supabase
@@ -28,13 +25,20 @@ class DatabaseService {
       .eq('user_id', userId)
       .eq('organization_id', organizationId)
       .eq('status', 'active')
-      .maybeSingle()
+      .maybeSingle()  // ← KORJATTU: .single() → .maybeSingle()
+    
     console.log('📊 Database query result:', { data, error })
     
     if (error) {
-      console.log('No role found for user in organization:', error.message)
+      console.log('❌ Query error:', error.message)
       return null
     }
+    
+    if (!data) {
+      console.log('❌ No role found for user in organization')
+      return null
+    }
+    
     console.log('✅ Role found:', data.role)
     return data.role
   }
@@ -77,119 +81,117 @@ class DatabaseService {
     return data
   }
 
-// database.js - korjattu getInvitationByToken:
-async getInvitationByToken(token) {
-  console.log('🔍 Looking for invitation with token:', token)
-  
-  // Yksinkertainen query ilman date filtering:iä ensin
-  const { data, error } = await this.supabase
-    .from('invitations')
-    .select('*')
-    .eq('token', token)
-    .eq('status', 'pending')
-  
-  console.log('📊 Query result:', { data, error, count: data?.length })
-  
-  if (error) {
-    console.log('❌ Query error:', error.message)
-    return null
-  }
-  
-  if (!data || data.length === 0) {
-    console.log('❌ No invitations found')
-    return null
-  }
-  
-  const invitation = data[0]
-  console.log('✅ Found invitation:', invitation)
-  
-  // Check expiry manually
-  const now = new Date()
-  const expiresAt = new Date(invitation.expires_at)
-  if (expiresAt < now) {
-    console.log('❌ Invitation expired')
-    return null
-  }
-  
-  // Hae organization erikseen
-  try {
-    const { data: orgData, error: orgError } = await this.supabase
-      .from('organizations')
-      .select('*')
-      .eq('id', invitation.organization_id)
-      .single()
+  async getInvitationByToken(token) {
+    console.log('🔍 Looking for invitation with token:', token)
     
-    if (!orgError && orgData) {
-      invitation.organization = orgData
-      console.log('✅ Added organization:', orgData.name)
-    }
-  } catch (orgError) {
-    console.error('Failed to load organization:', orgError)
-  }
-  
-  return invitation
-}
-
-// database.js - korjattu acceptInvitation
-async acceptInvitation(token, userId) {
-  console.log('🔍 acceptInvitation called with:', { token, userId })
-  
-  // 1. Hae invitation ensin
-  const invitation = await this.getInvitationByToken(token)
-  console.log('🔍 Found invitation:', invitation)
-  
-  if (!invitation) {
-    throw new Error('Invitation not found or expired')
-  }
-  
-  try {
-    // 2. Päivitä invitation status atomisesti
-    const { data: inviteUpdate, error: inviteError } = await this.supabase
+    const { data, error } = await this.supabase
       .from('invitations')
-      .update({
-        status: 'accepted',
-        accepted_at: new Date().toISOString()
-      })
+      .select('*')
       .eq('token', token)
-      .eq('status', 'pending')  // ← VARMISTA ETTÄ PENDING!
-      .select()
+      .eq('status', 'pending')
     
-    if (inviteError) {
-      console.error('❌ Failed to update invitation:', inviteError)
-      throw new Error(`Failed to accept invitation: ${inviteError.message}`)
+    console.log('📊 Query result:', { data, error, count: data?.length })
+    
+    if (error) {
+      console.log('❌ Query error:', error.message)
+      return null
     }
     
-    if (!inviteUpdate || inviteUpdate.length === 0) {
-      throw new Error('Invitation already accepted or expired')
+    if (!data || data.length === 0) {
+      console.log('❌ No invitations found')
+      return null
     }
     
-    console.log('✅ Invitation updated:', inviteUpdate[0])
+    const invitation = data[0]
+    console.log('✅ Found invitation:', invitation)
     
-    // 3. Luo user_organization_access merkintä
-    const { data: accessData, error: accessError } = await this.supabase
-      .from('user_organization_access')
-      .insert({
-        user_id: userId,
-        organization_id: invitation.organization_id,
-        role: invitation.role,
-        status: 'active',
-        created_at: new Date().toISOString()
-      })
-      .select()
-    
-    if (accessError) {
-      console.error('❌ Failed to create user access:', accessError)
-      throw new Error(`Failed to grant organization access: ${accessError.message}`)
+    // Check expiry manually
+    const now = new Date()
+    const expiresAt = new Date(invitation.expires_at)
+    if (expiresAt < now) {
+      console.log('❌ Invitation expired')
+      return null
     }
     
-    console.log('✅ User access created:', accessData[0])
+    // Hae organization erikseen
+    try {
+      const { data: orgData, error: orgError } = await this.supabase
+        .from('organizations')
+        .select('*')
+        .eq('id', invitation.organization_id)
+        .single()
+      
+      if (!orgError && orgData) {
+        invitation.organization = orgData
+        console.log('✅ Added organization:', orgData.name)
+      }
+    } catch (orgError) {
+      console.error('Failed to load organization:', orgError)
+    }
+    
     return invitation
-    
-  } catch (error) {
-    console.error('❌ acceptInvitation failed:', error)
-    throw error
   }
-}
+
+  // ✅ KORJATTU acceptInvitation metodi
+  async acceptInvitation(token, userId) {
+    console.log('🔍 acceptInvitation called with:', { token, userId })
+    
+    // 1. Hae invitation ensin
+    const invitation = await this.getInvitationByToken(token)
+    console.log('🔍 Found invitation:', invitation)
+    
+    if (!invitation) {
+      throw new Error('Invitation not found or expired')
+    }
+    
+    try {
+      // 2. Päivitä invitation status atomisesti
+      const { data: inviteUpdate, error: inviteError } = await this.supabase
+        .from('invitations')
+        .update({
+          status: 'accepted',
+          accepted_at: new Date().toISOString()
+        })
+        .eq('token', token)
+        .eq('status', 'pending')  // ← VARMISTA ETTÄ PENDING!
+        .select()
+      
+      if (inviteError) {
+        console.error('❌ Failed to update invitation:', inviteError)
+        throw new Error(`Failed to accept invitation: ${inviteError.message}`)
+      }
+      
+      if (!inviteUpdate || inviteUpdate.length === 0) {
+        throw new Error('Invitation already accepted or expired')
+      }
+      
+      console.log('✅ Invitation updated:', inviteUpdate[0])
+      
+      // 3. Luo user_organization_access merkintä
+      const { data: accessData, error: accessError } = await this.supabase
+        .from('user_organization_access')
+        .insert({
+          user_id: userId,
+          organization_id: invitation.organization_id,
+          role: invitation.role,
+          status: 'active',
+          created_at: new Date().toISOString()
+        })
+        .select()
+      
+      if (accessError) {
+        console.error('❌ Failed to create user access:', accessError)
+        throw new Error(`Failed to grant organization access: ${accessError.message}`)
+      }
+      
+      console.log('✅ User access created:', accessData[0])
+      return invitation
+      
+    } catch (error) {
+      console.error('❌ acceptInvitation failed:', error)
+      throw error
+    }
+  }
 
   async deleteInvitation(invitationId) {
     const { error } = await this.supabase
@@ -201,7 +203,7 @@ async acceptInvitation(token, userId) {
     return true
   }
 
-  // Organizations
+  // Organization management
   async getAllOrganizations() {
     const { data, error } = await this.supabase
       .from('organizations')
@@ -240,21 +242,21 @@ async acceptInvitation(token, userId) {
     return data
   }
 
-  async deleteOrganization(orgId) {
+  async deleteOrganization(organizationId) {
     const { error } = await this.supabase
       .from('organizations')
       .delete()
-      .eq('id', orgId)
+      .eq('id', organizationId)
     
     if (error) throw new Error(error.message)
     return true
   }
 
-  async getOrganization(orgId) {
+  async getOrganization(organizationId) {
     const { data, error } = await this.supabase
       .from('organizations')
       .select('*')
-      .eq('id', orgId)
+      .eq('id', organizationId)
       .single()
     
     if (error) throw new Error(error.message)
@@ -268,8 +270,7 @@ async acceptInvitation(token, userId) {
       .eq('slug', slug)
       .single()
     
-    if (error) return null
-    return data
+    return error ? null : data
   }
 
   async getUserOrganizations(userId) {
@@ -283,10 +284,10 @@ async acceptInvitation(token, userId) {
       .eq('status', 'active')
     
     if (error) throw new Error(error.message)
-    return data?.map(access => access.organization) || []
+    return data?.map(item => item.organization) || []
   }
 
-  // Drawings with organization context
+  // Drawing management
   async getDrawings(organizationId, userId) {
     const { data, error } = await this.supabase
       .from('drawings')
@@ -313,10 +314,10 @@ async acceptInvitation(token, userId) {
     return data[0]
   }
 
-  async updateDrawing(drawingId, updateData) {
+  async updateDrawing(drawingId, updates) {
     const { data, error } = await this.supabase
       .from('drawings')
-      .update(updateData)
+      .update(updates)
       .eq('id', drawingId)
       .select()
     
@@ -335,6 +336,4 @@ async acceptInvitation(token, userId) {
   }
 }
 
-// Singleton instance
 export const db = new DatabaseService()
-export default db

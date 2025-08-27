@@ -1,4 +1,3 @@
-// src/components/AppRouter.jsx
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useOrganization } from '../contexts/OrganizationContext'
@@ -12,7 +11,7 @@ import AdminDashboard from '../pages/adminpage/AdminDashboard'
 import PrivateRoute from './PrivateRoute'
 import OrganizationAdmin from '../pages/OrganizationAdmin'
 import Join from '../pages/Join'
-import AuthCallback from '../pages/AuthCallback'
+import AuthCallback from '../pages/AuthCallback'  // ← LISÄTTY
 
 // Landing page component (for main domain)
 const LandingPage = () => (
@@ -87,43 +86,37 @@ export default function AppRouter() {
       </div>
     )
   }
+
+  // Main Site (wisuron.fi)
   if (routingMode === 'MAIN_SITE') {
-  console.log('🌐 Routing to: Main Site')
-    return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/join" element={<Join />} /> 
-      <Route path="/auth/callback" element={<AuthCallback />} /> 
-      <Route path="/app" element={
-        <PrivateRoute>
-          <UploadAndJsonView />
-        </PrivateRoute>
-      } />
-      {/* ... rest of routes */}
-    </Routes>
-  )
-}
-  // Admin Dashboard (admin.pic2data.local)
-  if (routingMode === 'ADMIN') {
-        console.log('👑 Routing mode: ADMIN detected')
-
-
+    console.log('🌐 Routing to: Main Site')
     return (
       <Routes>
-        <Route path="*" element={
-          
-            <AdminDashboard />
-          
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/join" element={<Join />} />  
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/app" element={
+          <PrivateRoute>
+            <UploadAndJsonView />
+          </PrivateRoute>
         } />
+      </Routes>
+    )
+  }
 
+  // Admin Dashboard (admin.wisuron.fi)
+  if (routingMode === 'ADMIN') {
+    console.log('👑 Routing mode: ADMIN detected')
+    return (
+      <Routes>
+        <Route path="*" element={<AdminDashboard />} />
+      </Routes>
+    )
+  }
 
-    </Routes>
-  )
-}
-  
+  // Organization Login (mantox.wisuron.fi/login)
   if (routingMode === 'ORGANIZATION_LOGIN') {
-
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -134,15 +127,13 @@ export default function AppRouter() {
     )
   }
 
-  
+  // Organization App (mantox.wisuron.fi, finecom.wisuron.fi)
   if (routingMode === 'ORGANIZATION') {
     // If no organization found, redirect to login
     if (!organization) {
-
       return <Navigate to="/login" replace />
     }
     
-
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Organization Header */}
@@ -156,19 +147,13 @@ export default function AppRouter() {
                 </span>
               </div>
               <nav className="flex space-x-4">
-  <a href="/app" className="text-blue-600 hover:text-blue-800">Analytiikka</a>
-  <a href="/projektit" className="text-gray-600 hover:text-gray-800">Tarjoukset</a>
-  {/* ✅ DEBUG - näytä organization object */}
-  {console.log('🔍 Navigation debug:', {
-    organization: organization,
-    userRole: organization?.userRole,
-    shouldShowTeam: organization?.userRole === 'owner'
-  })}
-  {/* Näytä Team vain owner rooleille */}
-  {organization?.userRole === 'owner' && (
-    <a href="/team" className="text-gray-600 hover:text-gray-800">Team</a>
-  )}
-</nav>
+                <a href="/app" className="text-blue-600 hover:text-blue-800">Analytiikka</a>
+                <a href="/projektit" className="text-gray-600 hover:text-gray-800">Tarjoukset</a>
+                {/* Show Team only for owners */}
+                {organization?.userRole === 'owner' && (
+                  <a href="/team" className="text-gray-600 hover:text-gray-800">Team</a>
+                )}
+              </nav>
             </div>
           </div>
         </div>
@@ -191,12 +176,12 @@ export default function AppRouter() {
               <OrganizationAdmin />
             </PrivateRoute>
           } />
+          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
       </div>
     )
   }
-
 
   // 404 - Organization not found
   return (
@@ -204,7 +189,7 @@ export default function AppRouter() {
       <div className="text-center">
         <h1 className="text-2xl font-bold text-gray-900 mb-4">Organization Not Found</h1>
         <p className="text-gray-600 mb-8">The subdomain you're looking for doesn't exist.</p>
-        <a href="http://pic2data.local:5173" className="text-blue-600 hover:text-blue-800">
+        <a href="https://wisuron.fi" className="text-blue-600 hover:text-blue-800">
           Go to main site
         </a>
       </div>

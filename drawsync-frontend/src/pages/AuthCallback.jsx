@@ -1,8 +1,8 @@
-// src/pages/AuthCallback.jsx
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { db } from '../services/database'
+import { getSubdomain } from '../utils/subdomain'
 
 export default function AuthCallback() {
   const [searchParams] = useSearchParams()
@@ -16,59 +16,103 @@ export default function AuthCallback() {
 
   const handleAuthCallback = async () => {
     try {
-      // 1. Hae auth parametrit URL:sta
-      const access_token = searchParams.get('access_token')
-      const refresh_token = searchParams.get('refresh_token')
-      const type = searchParams.get('type')
+      // 1. Hae user auth data
+      const { data: { user }, error } = await supabase.auth.getUser()
+      if (error) throw error
+      if (!user) throw new Error('User not found after confirmation')
       
-      if (type === 'signup') {
-        setMessage('Email confirmed successfully! Setting up your account...')
+      console.log('✅ User confirmed:', user.id)
+      setMessage('Email confirmed! Processing invitation...')
+
+      // 2. Hae invitation context (multiple sources)
+      let invitationContext = null
+      
+      // Try localStorage first
+      const localData = localStorage.getItem('pending_invitation')
+      if (localData) {
+        invitationContext = JSON.parse(localData)
+        console.log('✅ Found invitation context in localStorage:', invitationContext)
+      }
+      
+      // Try sessionStorage
+      if (!invitationContext) {
+        const sessionData = sessionStorage.getItem('pending_invitation')
+        if (sessionData) {
+          invitationContext = JSON.parse(sessionData)
+          console.log('✅ Found invitation context in sessionStorage:', invitationContext)
+        }
+      }
+      
+      // Try cookie
+      if (!invitationContext) {
+        const cookies = document.cookie.split(';')
+        for (let cookie of cookies) {
+          const [name, value] = cookie.trim().split('=')
+          if (name === 'pending_invitation' && value) {
+            try {
+              invitationContext = JSON.parse(decodeURIComponent(value))
+              console.log('✅ Found invitation context in cookie:', invitationContext)
+              break
+            } catch (e) {
+              console.error('Failed to parse cookie:', e)
+            }
+          }
+        }
+      }
+
+      // 3. Jos invitation context löytyy → hyväksy invitation
+      if (invitationContext) {
+        console.log('✅ Processing invitation context:', invitationContext)
+        setMessage('Accepting invitation and setting up organization access...')
         
-        // 2. Supabase hoitaa automaattisesti session
-        const { data: { user }, error } = await supabase.auth.getUser()
-        
-        if (error) throw error
-        if (!user) throw new Error('User not found after confirmation')
-        
-        console.log('✅ User confirmed:', user.id)
-        
-        // 3. Tarkista onko käyttäjällä pending invitation
-        // (Voit tallentaa invitation token localStorageen Join.jsx:ssä)
-        const invitationToken = localStorage.getItem('pending_invitation_token')
-        
-        if (invitationToken) {
-          console.log('✅ Processing pending invitation:', invitationToken)
-          await db.acceptInvitation(invitationToken, user.id)
-          localStorage.removeItem('pending_invitation_token')
+        try {
+          await db.acceptInvitation(invitationContext.token, user.id)
+          console.log('✅ Invitation accepted successfully!')
+          
+          // Siivoa tallennetut tiedot
+          localStorage.removeItem('pending_invitation')
+          sessionStorage.removeItem('pending_invitation')
+          document.cookie = 'pending_invitation=; expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.wisuron.fi; path=/'
           
           setStatus('success')
-          setMessage('Account confirmed and invitation accepted! Redirecting...')
+          setMessage('Welcome to the team! Redirecting to your organization...')
           
+          // Redirect organisaation app:iin
           setTimeout(() => {
-            window.location.href = '/app'
+            window.location.href = `https://${invitationContext.organizationSlug}.wisuron.fi/app`
           }, 2000)
-        } else {
-          setStatus('success')
-          setMessage('Account confirmed! Redirecting...')
           
-          setTimeout(() => {
-            window.location.href = '/app'
-          }, 2000)
+        } catch (inviteError) {
+          console.error('❌ Failed to accept invitation:', inviteError)
+          setStatus('error')
+          setMessage(`Failed to process invitation: ${inviteError.message}`)
         }
         
       } else {
-        // Muut auth callback tyypit (password reset jne.)
+        // 4. Ei invitation contextia → normaali redirect
+        console.log('ℹ️ No invitation context found, normal auth callback')
+        
+        const hostname = window.location.hostname
+        const subdomain = getSubdomain(hostname)
+        
         setStatus('success')
-        setMessage('Redirecting...')
+        setMessage('Account confirmed! Redirecting...')
+        
         setTimeout(() => {
-          navigate('/app')
-        }, 1000)
+          if (subdomain) {
+            // Jos ollaan jo subdomainilla, mene app:iin
+            window.location.href = '/app'
+          } else {
+            // Pääsivulta, mene pääsivun app:iin
+            navigate('/app')
+          }
+        }, 1500)
       }
       
     } catch (error) {
-      console.error('Auth callback failed:', error)
+      console.error('❌ Auth callback failed:', error)
       setStatus('error')
-      setMessage(`Error: ${error.message}`)
+      setMessage(`Authentication error: ${error.message}`)
     }
   }
 
