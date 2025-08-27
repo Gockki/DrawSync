@@ -15,6 +15,8 @@ import {
 import { useOrganization } from '../contexts/OrganizationContext'
 import { db } from '../services/database'
 import NavigationHeader from '../components/NavigationHeader'
+import { apiClient } from '../utils/apiClient'
+import { getSubdomain } from '../utils/subdomain'
 
 export default function OrganizationAdmin() {
   const { organization, user } = useOrganization()
@@ -165,13 +167,12 @@ export default function OrganizationAdmin() {
   )
 }
 
-// InviteModal Component
+// InviteModal päivitetty versio OrganizationAdmin.jsx:ssä
 const InviteModal = ({ organization, currentUser, onClose, onSuccess }) => {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('user')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [inviteLink, setInviteLink] = useState('')
   const [showSuccess, setShowSuccess] = useState(false)
 
   const handleSubmit = async (e) => {
@@ -185,7 +186,7 @@ const InviteModal = ({ organization, currentUser, onClose, onSuccess }) => {
         throw new Error('Anna validi sähköpostiosoite')
       }
 
-      // Create invitation
+      // 1. Create invitation in database
       const invitation = await db.createInvitation(
         organization.id,
         email,
@@ -193,10 +194,20 @@ const InviteModal = ({ organization, currentUser, onClose, onSuccess }) => {
         currentUser.id
       )
 
-      // Generate invite link
-      const baseUrl = window.location.origin
-      const inviteUrl = `${baseUrl}/join?token=${invitation.token}`
-      setInviteLink(inviteUrl)
+      // 2. Send invitation email via backend
+      const emailResponse = await apiClient.postJson('/invitations/send', {
+        invitation_token: invitation.token,
+        recipient_email: email,
+        organization_name: organization.name,
+        inviter_name: currentUser.email, // or user.name if available
+        role: role
+      })
+
+      if (!emailResponse.ok) {
+        throw new Error('Email sending failed')
+      }
+
+      console.log('Invitation email sent:', emailResponse.id)
       setShowSuccess(true)
 
       // Reset form
@@ -205,20 +216,14 @@ const InviteModal = ({ organization, currentUser, onClose, onSuccess }) => {
 
     } catch (error) {
       console.error('Failed to create invitation:', error)
-      setError(error.message)
+      setError(error.message || 'Failed to send invitation')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const copyInviteLink = () => {
-    navigator.clipboard.writeText(inviteLink)
-    alert('Invite link copied to clipboard!')
-  }
-
   const closeModal = () => {
     setShowSuccess(false)
-    setInviteLink('')
     onClose()
     if (showSuccess) {
       onSuccess() // Refresh data
@@ -237,32 +242,11 @@ const InviteModal = ({ organization, currentUser, onClose, onSuccess }) => {
               Invitation Sent!
             </h3>
             <p className="text-gray-600 mb-4">
-              Invitation created for <strong>{email}</strong>
+              Invitation email sent to <strong>{email}</strong>
             </p>
-            
-            <div className="bg-gray-50 p-3 rounded-lg mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Invite Link:
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={inviteLink}
-                  readOnly
-                  className="flex-1 text-sm bg-white border border-gray-300 rounded px-3 py-2"
-                />
-                <button
-                  onClick={copyInviteLink}
-                  className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm"
-                >
-                  <Copy className="h-4 w-4" />
-                  Copy
-                </button>
-              </div>
-            </div>
-            
             <p className="text-xs text-gray-500 mb-6">
-              Share this link with the new team member. Link expires in 7 days.
+              The recipient will receive an email with instructions to join your organization.
+              Invitation expires in 7 days.
             </p>
           </div>
           
@@ -338,7 +322,7 @@ const InviteModal = ({ organization, currentUser, onClose, onSuccess }) => {
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
             >
               {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />}
-              {isLoading ? 'Creating...' : 'Send Invitation'}
+              {isLoading ? 'Sending...' : 'Send Invitation'}
             </button>
           </div>
         </form>
@@ -546,12 +530,15 @@ const InvitationsTab = ({ invitations, onRefresh }) => {
     return colors[status] || colors.pending
   }
 
-  const copyInviteLink = (token) => {
-    const baseUrl = window.location.origin
-    const inviteUrl = `${baseUrl}/join?token=${token}`
-    navigator.clipboard.writeText(inviteUrl)
-    alert('Invite link copied to clipboard!')
-  }
+const copyInviteLink = (token) => {
+  // Käytä nykyistä subdomainia
+  const hostname = window.location.hostname
+  const subdomain = getSubdomain(hostname)
+  const inviteUrl = `https://${subdomain}.wisuron.fi/join?token=${token}`
+  
+  navigator.clipboard.writeText(inviteUrl)
+  alert('Invite link copied to clipboard!')
+}
 
   if (invitations.length === 0) {
     return (

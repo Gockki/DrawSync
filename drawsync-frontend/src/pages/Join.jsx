@@ -97,7 +97,7 @@ export default function Join() {
   await db.acceptInvitation(token, user.id)
       // 3. Redirect to organization subdomain
       const orgSubdomain = invitation.organization.slug
-      const orgUrl = `http://${orgSubdomain}.pic2data.local:5173/app`
+      const orgUrl = `https://${invitation.organization.slug}.wisuron.fi/app`
       
       setTimeout(() => {
         window.location.href = orgUrl
