@@ -28,7 +28,7 @@ class DatabaseService {
       .eq('user_id', userId)
       .eq('organization_id', organizationId)
       .eq('status', 'active')
-      .single()
+      .maybeSingle()
     console.log('📊 Database query result:', { data, error })
     
     if (error) {
@@ -130,10 +130,11 @@ async getInvitationByToken(token) {
   return invitation
 }
 
+// database.js - korjattu acceptInvitation
 async acceptInvitation(token, userId) {
   console.log('🔍 acceptInvitation called with:', { token, userId })
   
-  // Hae invitation ensin
+  // 1. Hae invitation ensin
   const invitation = await this.getInvitationByToken(token)
   console.log('🔍 Found invitation:', invitation)
   
@@ -141,31 +142,53 @@ async acceptInvitation(token, userId) {
     throw new Error('Invitation not found or expired')
   }
   
-  // Update invitation status
-  const { data, error } = await this.supabase
-    .from('invitations')
-    .update({
-      status: 'accepted',
-      accepted_at: new Date().toISOString()
-    })
-    .eq('token', token)
-    .select()
-  
-  if (error) throw new Error(error.message)
-  
-  // Add user to organization
-  const { error: accessError } = await this.supabase
-    .from('user_organization_access')
-    .insert({
-      user_id: userId,
-      organization_id: invitation.organization_id,  // ← Käytä haettua invitation objektia
-      role: invitation.role,
-      status: 'active'
-    })
-  
-  if (accessError) throw new Error(accessError.message)
-  
-  return invitation
+  try {
+    // 2. Päivitä invitation status atomisesti
+    const { data: inviteUpdate, error: inviteError } = await this.supabase
+      .from('invitations')
+      .update({
+        status: 'accepted',
+        accepted_at: new Date().toISOString()
+      })
+      .eq('token', token)
+      .eq('status', 'pending')  // ← VARMISTA ETTÄ PENDING!
+      .select()
+    
+    if (inviteError) {
+      console.error('❌ Failed to update invitation:', inviteError)
+      throw new Error(`Failed to accept invitation: ${inviteError.message}`)
+    }
+    
+    if (!inviteUpdate || inviteUpdate.length === 0) {
+      throw new Error('Invitation already accepted or expired')
+    }
+    
+    console.log('✅ Invitation updated:', inviteUpdate[0])
+    
+    // 3. Luo user_organization_access merkintä
+    const { data: accessData, error: accessError } = await this.supabase
+      .from('user_organization_access')
+      .insert({
+        user_id: userId,
+        organization_id: invitation.organization_id,
+        role: invitation.role,
+        status: 'active',
+        created_at: new Date().toISOString()
+      })
+      .select()
+    
+    if (accessError) {
+      console.error('❌ Failed to create user access:', accessError)
+      throw new Error(`Failed to grant organization access: ${accessError.message}`)
+    }
+    
+    console.log('✅ User access created:', accessData[0])
+    return invitation
+    
+  } catch (error) {
+    console.error('❌ acceptInvitation failed:', error)
+    throw error
+  }
 }
 
   async deleteInvitation(invitationId) {

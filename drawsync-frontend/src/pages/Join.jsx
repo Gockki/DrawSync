@@ -53,67 +53,68 @@ export default function Join() {
     }
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
-    
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
-      return
-    }
-
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters')
-      return
-    }
-
-    setIsRegistering(true)
-
-    try {
-  // 1. Register user
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email: formData.email,
-    password: formData.password
-  })
-
-  if (authError) throw authError
-
-  const user = authData.user
-  if (!user) throw new Error('Registration failed')
-
-  console.log(' User registered:', user.id)
-
-  // Sign in immediately after registration
-  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-    email: formData.email,
-    password: formData.password
-  })
-
-  if (signInError) throw signInError
-
-  console.log(' User signed in:', signInData.user.id)
-
-  // 2. Accept invitation
-  await db.acceptInvitation(token, user.id)
-      // 3. Redirect to organization subdomain
-      const orgSubdomain = invitation.organization.slug
-      const orgUrl = `https://${invitation.organization.slug}.wisuron.fi/app`
-      
-      setTimeout(() => {
-        window.location.href = orgUrl
-      }, 2000)
-
-      // Show success message
-      setError('')
-      alert('Registration successful! Redirecting to your organization...')
-
-    } catch (error) {
-      console.error('Registration failed:', error)
-      setError(error.message)
-    } finally {
-      setIsRegistering(false)
-    }
+// Join.jsx - korjattu handleSubmit
+const handleSubmit = async (e) => {
+  e.preventDefault()
+  setError('')
+  
+  if (formData.password !== formData.confirmPassword) {
+    setError('Passwords do not match')
+    return
   }
+
+  if (formData.password.length < 6) {
+    setError('Password must be at least 6 characters')
+    return
+  }
+
+  setIsRegistering(true)
+
+  try {
+    // 1. Register user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: formData.email,
+      password: formData.password
+    })
+
+    if (authError) throw authError
+    const user = authData.user
+    if (!user) throw new Error('Registration failed')
+
+    console.log('✅ User registered:', user.id)
+
+    // 2. Sign in immediately after registration
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: formData.email,
+      password: formData.password
+    })
+
+    if (signInError) throw signInError
+    console.log('✅ User signed in:', signInData.user.id)
+
+    // 3. Accept invitation (TÄMÄ ON KRIITTINEN!)
+    await db.acceptInvitation(token, user.id)
+    console.log(' Invitation accepted')
+
+    // 4. Redirect to CORRECT organization subdomain
+    const orgSubdomain = invitation.organization.slug
+    const orgUrl = `https://${orgSubdomain}.wisuron.fi/app`
+    
+    setError('')
+    alert('Registration successful! Redirecting to your organization...')
+    
+    // Käytä window.location.href redirect
+    setTimeout(() => {
+      window.location.href = '/app'
+    }, 2000)
+
+  } catch (error) {
+    console.error('Registration failed:', error)
+    setError(error.message)
+  } finally {
+    setIsRegistering(false)
+  }
+}
 
   if (loading) {
     return (
