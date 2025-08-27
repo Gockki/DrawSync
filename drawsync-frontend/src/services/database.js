@@ -68,8 +68,8 @@ async createInvitation(organizationId, email, role = 'user', invitedBy) {
       email_address: email.toLowerCase(),
       role,
       invited_by: invitedBy,
-      status: 'pending',     // ✅
-      expires_at: expiresAt, // ✅
+      status: 'pending',     //
+      expires_at: expiresAt, //
       token                  // poista jos trigger generoi tämän
     })
     .select()
