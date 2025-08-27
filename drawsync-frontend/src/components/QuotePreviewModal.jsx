@@ -42,19 +42,24 @@ ${organizationData?.name || 'Tiimimme'}`)
 
   if (!isOpen) return null
 
-  const handleSend = async () => {
+const handleSend = async () => {
     // Email validation
     if (!customerData.email) {
       alert('Sähköpostiosoite on pakollinen')
       return
     }
-
-    // Development restriction - force jere@mantox.fi
-    const finalEmail = 'jere@mantox.fi' // Force to allowed email for now
+    
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(customerData.email)) {
+      alert('Virheellinen sähköpostiosoite')
+      return
+    }
     
     setIsLoading(true)
     try {
-      await onSend(finalEmail, emailSubject, emailMessage, customerData)
+      // Use customer's actual email address
+      await onSend(customerData.email, emailSubject, emailMessage, customerData)
       onClose()
     } catch (error) {
       console.error('Failed to send quote:', error)
