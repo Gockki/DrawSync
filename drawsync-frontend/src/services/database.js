@@ -55,20 +55,28 @@ class DatabaseService {
   }
 
   // Invitation management
-  async createInvitation(organizationId, email, role = 'user', invitedBy) {
-    const { data, error } = await this.supabase
-      .from('invitations')
-      .insert({
-        organization_id: organizationId,
-        email_address: email.toLowerCase(),
-        role,
-        invited_by: invitedBy
-      })
-      .select()
-    
-    if (error) throw new Error(error.message)
-    return data[0]
-  }
+async createInvitation(organizationId, email, role = 'user', invitedBy) {
+  const expiresAt = new Date(Date.now() + 7*24*60*60*1000).toISOString()
+  const token = (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2) + Date.now().toString(36)
+
+  const { data, error } = await this.supabase
+    .from('invitations')
+    .insert({
+      organization_id: organizationId,
+      email_address: email.toLowerCase(),
+      role,
+      invited_by: invitedBy,
+      status: 'pending',     // ✅
+      expires_at: expiresAt, // ✅
+      token                  // poista jos trigger generoi tämän
+    })
+    .select()
+
+  if (error) throw new Error(error.message)
+  return data[0]
+}
 
   async getInvitations(organizationId) {
     const { data, error } = await this.supabase
