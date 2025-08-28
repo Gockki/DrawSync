@@ -7,11 +7,11 @@ import { getSubdomain } from '../utils/subdomain'
 import Login from '../pages/Login'
 import Join from '../pages/Join'
 import AuthCallback from '../pages/AuthCallback'
-import UploadAndJsonView from '../components/UploadAndJsonView.jsx'  // ← korjattu
-import ProjectsPage from '../pages/ProjectsPage'
-import TeamManagement from '../pages/TeamManagement'
+import UploadAndJsonView from '../components/UploadAndJsonView.jsx' 
+
+
 import AdminDashboard from '../pages/adminpage/AdminDashboard'
-import MainSite from '../pages/MainSite'
+
 import PrivateRoute from './PrivateRoute'
 import LicenseErrorPage from '../pages/LicenseErrorPage'
 
