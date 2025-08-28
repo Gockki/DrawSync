@@ -1,3 +1,4 @@
+// src/pages/Login.jsx - TURVALLISUUSKORJATTU VERSIO
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useNavigate } from 'react-router-dom'
@@ -7,49 +8,37 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [isLogin, setIsLogin] = useState(true)
+  // ❌ POISTETTU: const [isLogin, setIsLogin] = useState(true)
+  // ❌ POISTETTU: rekisteröitymis-toggle
   const [isLoading, setIsLoading] = useState(false)
 
-const handleSubmit = async (e) => {
-  e.preventDefault()
-  setError('')
-  setIsLoading(true)
-  let result
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setIsLoading(true)
 
-  if (isLogin) {
-    result = await supabase.auth.signInWithPassword({ email, password })
-    
-    if (result.error) {
-      setError(result.error.message)
-      setIsLoading(false)
-      return
-    }
-
-
-    
-    setTimeout(() => {
-
-      window.location.href = '/app'
-}, 500)
+    // ✅ VAIN LOGIN - ei rekisteröitymistä!
+    try {
+      const result = await supabase.auth.signInWithPassword({ 
+        email, 
+        password 
+      })
       
-    } else {
-      result = await supabase.auth.signUp({ email, password })
-
       if (result.error) {
         setError(result.error.message)
         setIsLoading(false)
         return
       }
 
-      if (result.data.user && !result.data.user.confirmed_at) {
-        alert("Rekisteröinti onnistui! Tarkista sähköpostisi ja vahvista tilisi.")
-        setIsLoading(false)
-        return
-      }
-
+      // Onnistunut kirjautuminen
       setTimeout(() => {
-        navigate('/app')
+        window.location.href = '/app'
       }, 500)
+      
+    } catch (error) {
+      console.error('Login failed:', error)
+      setError('Kirjautuminen epäonnistui')
+      setIsLoading(false)
     }
   }
 
@@ -72,9 +61,17 @@ const handleSubmit = async (e) => {
           <div className="w-full h-[2px] bg-[#ff5757] rounded mt-3"></div>
         </div>
 
+        {/* Otsikko */}
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-bold text-white mb-2">Kirjaudu sisään</h1>
+          <p className="text-white/80 text-sm">Syötä tunnuksesi päästäksesi järjestelmään</p>
+        </div>
+
         {/* Sähköposti */}
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-white/90">Sähköposti</label>
+          <label className="block text-sm font-medium text-white/90">
+            Sähköposti
+          </label>
           <input
             type="email"
             required
@@ -82,12 +79,15 @@ const handleSubmit = async (e) => {
             onChange={(e) => setEmail(e.target.value)}
             className="w-full border border-white/30 bg-white/10 text-white placeholder-white/60 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-white"
             placeholder="nimi@example.com"
+            disabled={isLoading}
           />
         </div>
 
         {/* Salasana */}
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-white/90">Salasana</label>
+          <label className="block text-sm font-medium text-white/90">
+            Salasana
+          </label>
           <input
             type="password"
             required
@@ -95,12 +95,13 @@ const handleSubmit = async (e) => {
             onChange={(e) => setPassword(e.target.value)}
             className="w-full border border-white/30 bg-white/10 text-white placeholder-white/60 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-white"
             placeholder="********"
+            disabled={isLoading}
           />
         </div>
 
         {/* Virheilmoitus */}
         {error && (
-          <div className="bg-[#ffe5e5] text-[#ff5757] text-sm px-3 py-2 rounded">
+          <div className="bg-red-500/20 border border-red-500/50 text-red-100 text-sm px-3 py-2 rounded">
             {error}
           </div>
         )}
@@ -109,20 +110,47 @@ const handleSubmit = async (e) => {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full py-2 px-4 bg-white text-[#737373] font-semibold rounded-md hover:bg-[#ff5757]/90 transition disabled:opacity-50"
+          className="w-full py-3 px-4 bg-white text-[#737373] font-semibold rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {isLoading ? 'Kirjaudutaan...' : (isLogin ? 'Kirjaudu' : 'Rekisteröidy')}
+          {isLoading ? 'Kirjaudutaan...' : 'Kirjaudu sisään'}
         </button>
 
-        {/* Vaihtolinkki */}
-        <p
-          className="text-sm text-center text-white/80 hover:text-[#ff5757] underline cursor-pointer transition"
-          onClick={() => setIsLogin(!isLogin)}
-        >
-          {isLogin
-            ? 'Eikö sinulla ole tunnusta? Rekisteröidy'
-            : 'Onko sinulla tunnus? Kirjaudu sisään'}
-        </p>
+        {/* ❌ POISTETTU: Rekisteröidy-linkki */}
+        {/* ✅ LISÄTTY: Contact info */}
+        <div className="mt-6 pt-4 border-t border-white/20">
+          <p className="text-center text-sm text-white/70 mb-2">
+            Tarvitsetko käyttöoikeuden?
+          </p>
+          <div className="text-center space-y-2">
+            <a 
+              href="mailto:admin@wisuron.fi" 
+              className="block text-sm text-blue-200 hover:text-blue-100 underline transition-colors"
+            >
+              📧 Ota yhteyttä ylläpitoon
+            </a>
+            <p className="text-xs text-white/60">
+              Uudet käyttäjät tarvitsevat kutsun organisaation ylläpitäjältä
+            </p>
+          </div>
+        </div>
+
+        {/* Unohtunut salasana */}
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={() => {
+              if (email) {
+                supabase.auth.resetPasswordForEmail(email)
+                alert('Salasanan palautusohje lähetetty sähköpostiin')
+              } else {
+                alert('Syötä sähköpostiosoite ensin')
+              }
+            }}
+            className="text-sm text-blue-200 hover:text-blue-100 underline transition-colors"
+          >
+            Unohditko salasanan?
+          </button>
+        </div>
       </form>
     </div>
   )
