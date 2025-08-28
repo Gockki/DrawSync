@@ -1,100 +1,73 @@
-import { useState, useEffect } from 'react'
+// src/components/AppRouter.jsx - PÄIVITETTY LISENSSILOGIIKALLA
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useOrganization } from '../contexts/OrganizationContext'
 import { getSubdomain } from '../utils/subdomain'
 
-// Import existing components
-import UploadAndJsonView from './UploadAndJsonView'
-import Projects from '../pages/Projects'
+// Pages
 import Login from '../pages/Login'
-import AdminDashboard from '../pages/adminpage/AdminDashboard'
-import PrivateRoute from './PrivateRoute'
-import OrganizationAdmin from '../pages/OrganizationAdmin'
 import Join from '../pages/Join'
-import AuthCallback from '../pages/AuthCallback'  // ← LISÄTTY
-
-// Landing page component (for main domain)
-const LandingPage = () => (
-  <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-    <div className="text-center">
-      <h1 className="text-4xl font-bold text-gray-900 mb-4">
-        Welcome to Wisuron
-      </h1>
-      <p className="text-xl text-gray-600 mb-8">
-        Transform your technical drawings into actionable data
-      </p>
-      <div className="space-x-4">
-        <button 
-          onClick={() => window.location.href = '/app'}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
-        >
-          Get Started
-        </button>
-        <button 
-          onClick={() => window.location.href = '/admin'}
-          className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-medium"
-        >
-          Admin Login
-        </button>
-      </div>
-    </div>
-  </div>
-)
+import AuthCallback from '../pages/AuthCallback'
+import UploadAndJsonView from '../pages/UploadAndJsonView'
+import ProjectsPage from '../pages/ProjectsPage'
+import TeamManagement from '../pages/TeamManagement'
+import AdminDashboard from '../pages/adminpage/AdminDashboard'
+import MainSite from '../pages/MainSite'
+import PrivateRoute from './PrivateRoute'
+import LicenseErrorPage from '../pages/LicenseErrorPage'
 
 export default function AppRouter() {
   const { organization, loading } = useOrganization()
-  const [routingMode, setRoutingMode] = useState(null)
-
-  useEffect(() => {
-    const hostname = window.location.hostname
-    const subdomain = getSubdomain(hostname)
-    const currentPath = window.location.pathname
-    
-    if (loading) return
-
-    // ✅ Determine new routing mode
-    let newRoutingMode = null
-    
-    if (subdomain === 'admin') {
-      newRoutingMode = 'ADMIN'
-    } else if (subdomain && currentPath === '/login') {
-      newRoutingMode = 'ORGANIZATION_LOGIN'
-    } else if (subdomain && organization && organization.type !== 'PLATFORM_ADMIN') {
-      newRoutingMode = 'ORGANIZATION'
-    } else if (subdomain && !organization) {
-      newRoutingMode = 'ORGANIZATION'
-    } else if (!subdomain) {
-      newRoutingMode = 'MAIN_SITE'
-    } else {
-      newRoutingMode = 'NOT_FOUND'
-    }
-
-    // ✅ Only update state if it actually changed
-    if (newRoutingMode !== routingMode) {
-      console.log('🔄 Routing mode change:', routingMode, '→', newRoutingMode)
-      setRoutingMode(newRoutingMode)
-    }
-  }, [organization, loading, routingMode]) 
-
-  if (loading || !routingMode) {
+  
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto mb-4" />
-          <p className="text-gray-600">Loading Wisuron...</p>
+          <p className="text-gray-600">Tarkistetaan käyttöoikeuksia...</p>
         </div>
       </div>
     )
   }
 
-  // Main Site (wisuron.fi)
-  if (routingMode === 'MAIN_SITE') {
-    console.log('🌐 Routing to: Main Site')
+  // Determine routing mode
+  const hostname = window.location.hostname
+  const subdomain = getSubdomain(hostname)
+  let routingMode = 'MAIN_SITE'
+
+  if (subdomain === 'admin') {
+    routingMode = 'ADMIN'
+  } else if (subdomain && subdomain !== 'admin') {
+    if (organization) {
+      if (organization.type === 'LICENSE_ERROR' || organization.type === 'ACCESS_DENIED') {
+        routingMode = 'LICENSE_ERROR'
+      } else {
+        routingMode = 'ORGANIZATION'
+      }
+    } else {
+      routingMode = 'ORGANIZATION_LOGIN'
+    }
+  }
+
+  console.log('Routing mode determined:', routingMode, { subdomain, organization })
+
+  // LICENSE ERROR ROUTING
+  if (routingMode === 'LICENSE_ERROR') {
+    console.log('License error detected:', organization.error)
     return (
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route path="*" element={<LicenseErrorPage error={organization} />} />
+      </Routes>
+    )
+  }
+
+  // MAIN SITE
+  if (routingMode === 'MAIN_SITE') {
+    console.log('Routing to: Main Site')
+    return (
+      <Routes>
+        <Route path="/" element={<MainSite />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/join" element={<Join />} />  
+        <Route path="/join" element={<Join />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/app" element={
           <PrivateRoute>
@@ -105,9 +78,9 @@ export default function AppRouter() {
     )
   }
 
-  // Admin Dashboard (admin.wisuron.fi)
+  // ADMIN DASHBOARD
   if (routingMode === 'ADMIN') {
-    console.log('👑 Routing mode: ADMIN detected')
+    console.log('Routing mode: ADMIN detected')
     return (
       <Routes>
         <Route path="*" element={<AdminDashboard />} />
@@ -115,7 +88,7 @@ export default function AppRouter() {
     )
   }
 
-  // Organization Login (mantox.wisuron.fi/login)
+  // ORGANIZATION LOGIN
   if (routingMode === 'ORGANIZATION_LOGIN') {
     return (
       <Routes>
@@ -127,9 +100,8 @@ export default function AppRouter() {
     )
   }
 
-  // Organization App (mantox.wisuron.fi, finecom.wisuron.fi)
+  // ORGANIZATION APP
   if (routingMode === 'ORGANIZATION') {
-    // If no organization found, redirect to login
     if (!organization) {
       return <Navigate to="/login" replace />
     }
@@ -145,11 +117,36 @@ export default function AppRouter() {
                 <span className="ml-3 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
                   {organization.industry_type}
                 </span>
+                
+                {/* LISENSSISTATUKSEN NÄYTTÖ */}
+                {organization.license && (
+                  <div className="ml-3 flex items-center">
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      organization.license.status === 'active' 
+                        ? 'bg-green-100 text-green-800'
+                        : organization.license.status === 'trial'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {organization.license.status === 'active' && 'Aktiivinen'}
+                      {organization.license.status === 'trial' && 'Kokeiluversio'}
+                      {organization.license.status === 'expired' && 'Vanhentunut'}
+                      {organization.license.status === 'suspended' && 'Keskeytetty'}
+                    </span>
+                    
+                    {organization.license.license_type && (
+                      <span className="ml-2 px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">
+                        {organization.license.license_type.charAt(0).toUpperCase() + organization.license.license_type.slice(1)}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
+              
               <nav className="flex space-x-4">
                 <a href="/app" className="text-blue-600 hover:text-blue-800">Analytiikka</a>
                 <a href="/projektit" className="text-gray-600 hover:text-gray-800">Tarjoukset</a>
-                {/* Show Team only for owners */}
+                
                 {organization?.userRole === 'owner' && (
                   <a href="/team" className="text-gray-600 hover:text-gray-800">Team</a>
                 )}
@@ -157,8 +154,8 @@ export default function AppRouter() {
             </div>
           </div>
         </div>
-
-        {/* Organization Routes */}
+        
+        {/* Routes */}
         <Routes>
           <Route path="/" element={<Navigate to="/app" replace />} />
           <Route path="/app" element={
@@ -168,28 +165,30 @@ export default function AppRouter() {
           } />
           <Route path="/projektit" element={
             <PrivateRoute>
-              <Projects />
+              <ProjectsPage />
             </PrivateRoute>
           } />
           <Route path="/team" element={
             <PrivateRoute>
-              <OrganizationAdmin />
+              <TeamManagement />
             </PrivateRoute>
           } />
-          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
       </div>
     )
   }
 
-  // 404 - Organization not found
+  // Fallback
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="text-center">
         <h1 className="text-2xl font-bold text-gray-900 mb-4">Organization Not Found</h1>
         <p className="text-gray-600 mb-8">The subdomain you're looking for doesn't exist.</p>
-        <a href="https://wisuron.fi" className="text-blue-600 hover:text-blue-800">
+        <a 
+          href="http://pic2data.local:5173" 
+          className="text-blue-600 hover:text-blue-800"
+        >
           Go to main site
         </a>
       </div>
