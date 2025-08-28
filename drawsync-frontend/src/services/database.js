@@ -30,11 +30,14 @@ class DatabaseService {
 
   async canUserLoginToOrganization(userId, organizationId) {
     try {
+      console.log('🔍 canUserLoginToOrganization params:', { userId, organizationId })
       const { data, error } = await this.supabase
         .rpc('can_user_login_to_organization', { 
           user_id: userId, 
           org_id: organizationId 
         })
+
+      console.log('🔍 RPC raw response:', { data, error })
       
       if (error) {
         console.error('User login check failed:', error)
