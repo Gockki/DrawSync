@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useNavigate } from 'react-router-dom'
-import wisuronLogo from '../assets/Wisuron logo.svg 
+import wisuronLogo from '../assets/Wisuron logo.svg'
 
 
 export default function Login() {
