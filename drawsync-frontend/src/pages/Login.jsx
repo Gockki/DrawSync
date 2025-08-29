@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useNavigate } from 'react-router-dom'
+import Mantox Logo from '../assets/Wisuron logo.svg 
 
 export default function Login() {
   const navigate = useNavigate()
@@ -53,7 +54,7 @@ export default function Login() {
           <div className="relative inline-block">
             <div className="absolute inset-0 bg-gradient-to-r from-white/60 to-transparent rounded-md blur-sm"></div>
             <img
-              src="/src/assets/mantox-logo-musta.png"
+              src="/src/assets/Wisuron logo.svg"
               alt="Mantox Logo"
               className="relative h-14"
             />
