@@ -55,7 +55,7 @@ export default function Login() {
           <div className="relative inline-block">
             <div className="absolute inset-0 bg-gradient-to-r from-white/60 to-transparent rounded-md blur-sm"></div>
 <img
-  src="/src/assets/Wisuron logo.svg"
+  src={wisuronLogo}
   alt="Wisuron Logo"
   className="relative h-14"
 />
