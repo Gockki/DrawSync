@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useNavigate } from 'react-router-dom'
-import Mantox Logo from '../assets/Wisuron logo.svg 
+
 
 export default function Login() {
   const navigate = useNavigate()
