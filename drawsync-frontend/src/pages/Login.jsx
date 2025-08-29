@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useNavigate } from 'react-router-dom'
+import wisuronLogo from '../assets/Wisuron logo.svg 
 
 
 export default function Login() {
@@ -53,11 +54,11 @@ export default function Login() {
         <div className="flex flex-col items-center mb-4">
           <div className="relative inline-block">
             <div className="absolute inset-0 bg-gradient-to-r from-white/60 to-transparent rounded-md blur-sm"></div>
-            <img
-              src="/src/assets/Wisuron logo.svg"
-              alt="Mantox Logo"
-              className="relative h-14"
-            />
+<img
+  src="/src/assets/Wisuron logo.svg"
+  alt="Wisuron Logo"
+  className="relative h-14"
+/>
           </div>
           <div className="w-full h-[2px] bg-[#ff5757] rounded mt-3"></div>
         </div>
